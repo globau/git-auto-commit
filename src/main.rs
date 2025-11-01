@@ -156,10 +156,10 @@ fn display_commit_info(commit_description: &str, files: &[changeset::FileChange]
     let _ = writeln!(io::stdout());
     for line in commit_description.lines() {
         if line.len() <= MAX_LINE_LENGTH {
-            let _ = writeln!(io::stdout(), "{}", line);
+            let _ = writeln!(io::stdout(), "{line}");
         } else {
             let (first_part, rest) = line.split_at(MAX_LINE_LENGTH);
-            let _ = write!(io::stdout(), "{}", first_part);
+            let _ = write!(io::stdout(), "{first_part}");
             let _ = writeln!(io::stdout(), "{}", rest.red());
         }
     }
