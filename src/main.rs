@@ -46,7 +46,7 @@ fn process_changes(changeset: &ChangeSet) {
             "diff is large ({} chars), this may use many tokens",
             diff_size
         );
-        let response = ui::prompt(&["continue", "ABORT"]);
+        let response = ui::prompt(&["continue", "abort"]);
         if response == "a" {
             std::process::exit(1);
         }
