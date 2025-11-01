@@ -145,19 +145,19 @@ pub fn prompt(options: &[&str]) -> String {
                 // handle esc
                 KeyCode::Esc => {
                     disable_raw_mode().ok();
-                    println!("^C");
+                    output!("^C");
                     std::process::exit(3);
                 }
                 // handle ctrl-c
                 KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
                     disable_raw_mode().ok();
-                    println!("^C");
+                    output!("^C");
                     std::process::exit(3);
                 } // handle enter (use first option as default)
                 KeyCode::Enter => {
                     let ch = valid_chars[0];
                     disable_raw_mode().ok();
-                    println!("{ch}");
+                    output!(ch);
                     break ch.to_string();
                 }
                 // handle valid character input
@@ -165,7 +165,7 @@ pub fn prompt(options: &[&str]) -> String {
                     let lower = c.to_lowercase().next().unwrap();
                     if valid_chars.contains(&lower) {
                         disable_raw_mode().ok();
-                        println!("{lower}");
+                        output!(lower);
                         break lower.to_string();
                     }
                 }
@@ -177,7 +177,6 @@ pub fn prompt(options: &[&str]) -> String {
 
 pub fn edit_one_line(line: &str) -> String {
     use rustyline::DefaultEditor;
-    use std::io::{self, Write};
 
     // create a rustyline editor
     let mut editor = DefaultEditor::new().unwrap_or_else(|_| {
@@ -188,7 +187,7 @@ pub fn edit_one_line(line: &str) -> String {
     if let Ok(edited) = editor.readline_with_initial("? ", (line, "")) {
         edited
     } else {
-        let _ = writeln!(io::stderr(), "^C");
+        output!("^C");
         std::process::exit(3);
     }
 }
