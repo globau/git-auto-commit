@@ -8,6 +8,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::io::IsTerminal;
 use std::path::Path;
 
+const MAX_LINE_LENGTH: usize = 72;
+const MAX_FILES_TO_SHOW: usize = 10;
+
 fn main() {
     // sanity checks
     if !std::io::stdin().is_terminal()
@@ -146,9 +149,22 @@ fn generate(
 
 /// display commit description and files
 fn display_commit_info(commit_description: &str, files: &[changeset::FileChange]) {
-    const MAX_FILES_TO_SHOW: usize = 10;
+    use colored::Colorize;
+    use std::io::{self, Write};
 
-    output!("\n{}\n", commit_description);
+    // print each line of commit description, highlighting chars beyond MAX_LINE_LENGTH-1 in red
+    let _ = writeln!(io::stdout());
+    for line in commit_description.lines() {
+        if line.len() <= MAX_LINE_LENGTH {
+            let _ = writeln!(io::stdout(), "{}", line);
+        } else {
+            let (first_part, rest) = line.split_at(MAX_LINE_LENGTH);
+            let _ = write!(io::stdout(), "{}", first_part);
+            let _ = writeln!(io::stdout(), "{}", rest.red());
+        }
+    }
+    let _ = writeln!(io::stdout());
+
     title!("files:");
 
     let files_to_show = files.iter().take(MAX_FILES_TO_SHOW);
@@ -174,13 +190,20 @@ fn display_commit_info(commit_description: &str, files: &[changeset::FileChange]
 /// check if commit description needs auto-reroll
 fn should_auto_reroll(commit_description: &str, multi_line: bool, auto_reroll_count: u32) -> bool {
     // check for issues that would trigger auto-reroll
-    let first_line_too_long = commit_description.lines().next().unwrap_or("").len() > 72;
+    let first_line_too_long =
+        commit_description.lines().next().unwrap_or("").len() > MAX_LINE_LENGTH;
 
     if first_line_too_long {
         if auto_reroll_count >= 3 {
-            error!("commit message is longer than 72 chars (not auto-rerolling after 3 attempts)");
+            error!(
+                "commit message is longer than {} chars (not auto-rerolling after 3 attempts)",
+                MAX_LINE_LENGTH
+            );
         } else {
-            error!("commit message is longer than 72 chars, rerolling...");
+            error!(
+                "commit message is longer than {} chars, rerolling...",
+                MAX_LINE_LENGTH
+            );
             return true;
         }
     }
