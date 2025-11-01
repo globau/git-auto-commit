@@ -157,15 +157,15 @@ pub fn prompt(options: &[&str]) -> String {
                 KeyCode::Enter => {
                     let ch = valid_chars[0];
                     disable_raw_mode().ok();
-                    output!(ch);
+                    output!(options[0]);
                     break ch.to_string();
                 }
                 // handle valid character input
                 KeyCode::Char(c) => {
                     let lower = c.to_lowercase().next().unwrap();
-                    if valid_chars.contains(&lower) {
+                    if let Some(idx) = valid_chars.iter().position(|&ch| ch == lower) {
                         disable_raw_mode().ok();
-                        output!(lower);
+                        output!(options[idx]);
                         break lower.to_string();
                     }
                 }
