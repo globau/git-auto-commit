@@ -3,8 +3,8 @@ rs-files := $(wildcard src/*.rs)
 .PHONY: build
 build: target/release/git-auto-commit
 
-target/release/git-auto-commit: $(rs-files) Cargo.toml
-	cargo build --release
+target/release/git-auto-commit: $(rs-files) Cargo.toml Makefile
+	RUSTFLAGS="--remap-path-prefix=$$HOME=~" cargo build --release
 
 .PHONY: format
 format:
