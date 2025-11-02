@@ -23,7 +23,7 @@ A Rust CLI tool that analyses git changes and generates commit messages using Cl
 
 ## Requirements
 
-- Rust 1.85 or later
+- Rust 1.88 or later
 - Git
 - [`claude` CLI tool](https://github.com/anthropics/claude-cli) - required for commit message generation
 
