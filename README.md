@@ -81,7 +81,7 @@ A src/auth.rs
 M src/main.rs
 M Cargo.toml
 
-[Y]ES/[n]o/[r]eroll/[l]ong/[e]dit/[p]rompt ? l
+[Y]ES/[n]o/[r]eroll/[l]ong/[e]dit/[p]rompt ? long
 
 generating commit description from staged changes touching 3 files...
 
@@ -96,7 +96,7 @@ A src/auth.rs
 M src/main.rs
 M Cargo.toml
 
-[Y]ES/[n]o/[r]eroll/[s]hort/[e]dit/[p]rompt ? y
+[Y]ES/[n]o/[r]eroll/[s]hort/[e]dit/[p]rompt ? YES
 
 [main abc1234] add user authentication with JWT tokens
  3 files changed, 156 insertions(+), 2 deletions(-)
