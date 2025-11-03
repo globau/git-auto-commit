@@ -77,16 +77,45 @@ fn process_changes(changeset: &ChangeSet) {
         // display commit info
         display_commit_info(&commit_description, &changeset.files);
 
-        // validate and check for auto-reroll
-        if should_auto_reroll(&commit_description, multi_line, auto_reroll_count) {
-            auto_reroll_count += 1;
-            think_hard = true;
-            continue;
+        // auto-reroll long lines (claude frequently ignores the 72 char limit)
+        let first_line_too_long =
+            commit_description.lines().next().unwrap_or("").len() > MAX_LINE_LENGTH;
+        if first_line_too_long {
+            if auto_reroll_count >= 3 {
+                error!(
+                    "commit message is longer than {} chars (not auto-rerolling after 3 attempts)",
+                    MAX_LINE_LENGTH
+                );
+            } else {
+                error!(
+                    "commit message is longer than {} chars, rerolling...",
+                    MAX_LINE_LENGTH
+                );
+                auto_reroll_count += 1;
+                think_hard = true;
+                continue;
+            }
         }
         auto_reroll_count = 0;
 
+        // display warnings
+        if commit_description.to_lowercase().contains("claude") {
+            warning!("warning: commit desc contains a reference to Claude");
+        }
+        if !multi_line && commit_description.contains('\n') {
+            warning!("warning: commit message contains multiple lines");
+        }
+
         // prompt user and handle action
-        let action = prompt_user_action(multi_line);
+        let options = [
+            "YES",
+            "no",
+            "reroll",
+            if multi_line { "short" } else { "long" },
+            "edit",
+            "prompt",
+        ];
+        let action = ui::prompt(&options);
         match handle_user_action(
             &action,
             &mut commit_description,
@@ -184,50 +213,6 @@ fn display_commit_info(commit_description: &str, files: &[FileChange]) {
     }
 
     output!();
-}
-
-/// check if commit description needs auto-reroll
-fn should_auto_reroll(commit_description: &str, multi_line: bool, auto_reroll_count: u32) -> bool {
-    // check for issues that would trigger auto-reroll
-    let first_line_too_long =
-        commit_description.lines().next().unwrap_or("").len() > MAX_LINE_LENGTH;
-
-    if first_line_too_long {
-        if auto_reroll_count >= 3 {
-            error!(
-                "commit message is longer than {} chars (not auto-rerolling after 3 attempts)",
-                MAX_LINE_LENGTH
-            );
-        } else {
-            error!(
-                "commit message is longer than {} chars, rerolling...",
-                MAX_LINE_LENGTH
-            );
-            return true;
-        }
-    }
-
-    // warnings only, don't auto-reroll
-    if commit_description.to_lowercase().contains("claude") {
-        warning!("warning: commit desc contains a reference to Claude");
-    }
-    if !multi_line && commit_description.contains('\n') {
-        warning!("warning: commit message contains multiple lines");
-    }
-    false
-}
-
-/// prompt user for action
-fn prompt_user_action(multi_line: bool) -> String {
-    let options = [
-        "YES",
-        "no",
-        "reroll",
-        if multi_line { "short" } else { "long" },
-        "edit",
-        "prompt",
-    ];
-    ui::prompt(&options)
 }
 
 /// handle user action and return what to do next
