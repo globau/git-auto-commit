@@ -185,7 +185,7 @@ pub fn edit_one_line(line: &str) -> String {
 
     // show the prompt and pre-filled text
     if let Ok(edited) = editor.readline_with_initial("? ", (line, "")) {
-        edited
+        edited.trim().to_string()
     } else {
         output!("^C");
         std::process::exit(3);

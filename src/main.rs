@@ -266,9 +266,14 @@ fn handle_user_action(
             for line in claude::get_prompt(*multi_line).lines() {
                 output!("> {}", line);
             }
+            let old_prompt_extra = prompt_extra.clone();
             *prompt_extra = ui::edit_one_line(prompt_extra.as_str());
             title!("thinking...");
-            UserAction::Reroll
+            if *prompt_extra == old_prompt_extra {
+                UserAction::Continue
+            } else {
+                UserAction::Reroll
+            }
         }
         _ => UserAction::Continue,
     }
