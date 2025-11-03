@@ -9,6 +9,7 @@ use std::path::Path;
 
 const MAX_LINE_LENGTH: usize = 72;
 const MAX_FILES_TO_SHOW: usize = 10;
+const MAX_AUTO_REROLLS: usize = 3;
 
 fn main() {
     // sanity checks
@@ -78,19 +79,26 @@ fn process_changes(changeset: &ChangeSet) {
         display_commit_info(&commit_description, &changeset.files);
 
         // auto-reroll long lines (claude frequently ignores the 72 char limit)
-        let first_line_too_long =
-            commit_description.lines().next().unwrap_or("").len() > MAX_LINE_LENGTH;
-        if first_line_too_long {
-            if auto_reroll_count >= 3 {
+        let any_line_too_long = commit_description
+            .lines()
+            .any(|line| line.len() > MAX_LINE_LENGTH);
+        if any_line_too_long {
+            let message = format!(
+                "commit message {} longer than {} chars",
+                if commit_description.lines().count() > 1 {
+                    "has lines"
+                } else {
+                    "is"
+                },
+                MAX_LINE_LENGTH
+            );
+            if auto_reroll_count >= MAX_AUTO_REROLLS {
                 error!(
-                    "commit message is longer than {} chars (not auto-rerolling after 3 attempts)",
-                    MAX_LINE_LENGTH
+                    "{} (not auto-rerolling after {} attempts)",
+                    message, MAX_AUTO_REROLLS
                 );
             } else {
-                error!(
-                    "commit message is longer than {} chars, rerolling...",
-                    MAX_LINE_LENGTH
-                );
+                error!("{}, rerolling...", message);
                 auto_reroll_count += 1;
                 think_hard = true;
                 continue;

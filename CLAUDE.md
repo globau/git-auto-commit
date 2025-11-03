@@ -67,7 +67,7 @@ The codebase has several modules:
    - long/short: toggle between multi-line and single-line formats
    - edit: manually edit description (single-line or multi-line based on current format)
    - prompt: add extra context to Claude prompt
-5. Auto-rerolls (max 3 attempts) if first line exceeds 72 characters
+5. Auto-rerolls (max 3 attempts) if any line exceeds 72 characters
 6. Warns if commit message contains "Claude" or has unexpected newlines
 7. Displays up to 10 files in output (with count of remaining files if more)
 8. Stages unstaged changes before committing (if applicable)
