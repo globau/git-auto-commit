@@ -1,4 +1,5 @@
 use super::*;
+use git2::Delta;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -88,13 +89,13 @@ fn test_file_rename() {
     );
 
     let file = &changeset.files[0];
-    assert_eq!(file.status, 'R', "status should be R for rename");
+    assert_eq!(file.status, Delta::Renamed, "status should be R for rename");
     assert_eq!(file.path, "new_name.txt");
     assert_eq!(file.old_path, Some("old_name.txt".to_string()));
 
     println!("Rename detected:");
     println!(
-        "  status: {}, old_path: {:?}, new_path: {}",
+        "  status: {:?}, old_path: {:?}, new_path: {}",
         file.status, file.old_path, file.path
     );
 }
@@ -136,13 +137,13 @@ fn test_file_move_to_subdirectory() {
     );
 
     let file = &changeset.files[0];
-    assert_eq!(file.status, 'R', "status should be R for move");
+    assert_eq!(file.status, Delta::Renamed, "status should be R for move");
     assert_eq!(file.path, "subdir/file.txt");
     assert_eq!(file.old_path, Some("file.txt".to_string()));
 
     println!("Move detected:");
     println!(
-        "  status: {}, old_path: {:?}, new_path: {}",
+        "  status: {:?}, old_path: {:?}, new_path: {}",
         file.status, file.old_path, file.path
     );
 }
@@ -188,9 +189,9 @@ fn test_mixed_operations() {
     );
     for file in &changeset.files {
         if let Some(old_path) = &file.old_path {
-            println!("  status: {}, {} → {}", file.status, old_path, file.path);
+            println!("  status: {:?}, {} → {}", file.status, old_path, file.path);
         } else {
-            println!("  status: {}, path: {}", file.status, file.path);
+            println!("  status: {:?}, path: {}", file.status, file.path);
         }
     }
 
@@ -230,7 +231,7 @@ fn test_binary_file_is_ignored() {
     println!("Binary file test - {} file(s):", changeset.files.len());
     for file in &changeset.files {
         println!(
-            "  status: {}, path: {}, diff_ignored: {}",
+            "  status: {:?}, path: {}, diff_ignored: {}",
             file.status, file.path, file.diff_ignored
         );
     }
@@ -339,7 +340,7 @@ fn test_stage_function_with_deletions_and_renames() {
         changeset.files.len()
     );
     for file in &changeset.files {
-        println!("  status: {}, path: {}", file.status, file.path);
+        println!("  status: {:?}, path: {}", file.status, file.path);
     }
 
     // stage the changes using our stage() function
@@ -352,9 +353,9 @@ fn test_stage_function_with_deletions_and_renames() {
     println!("After staging - {} staged file(s):", staged_files.len());
     for file in &staged_files {
         if let Some(old_path) = &file.old_path {
-            println!("  status: {}, {} → {}", file.status, old_path, file.path);
+            println!("  status: {:?}, {} → {}", file.status, old_path, file.path);
         } else {
-            println!("  status: {}, path: {}", file.status, file.path);
+            println!("  status: {:?}, path: {}", file.status, file.path);
         }
     }
 
@@ -368,18 +369,18 @@ fn test_stage_function_with_deletions_and_renames() {
     // verify each operation is correctly staged
     let has_modified = staged_files
         .iter()
-        .any(|f| f.status == 'M' && f.path == "to_modify.txt");
+        .any(|f| f.status == Delta::Modified && f.path == "to_modify.txt");
     let has_deleted = staged_files
         .iter()
-        .any(|f| f.status == 'D' && f.path == "to_delete.txt");
+        .any(|f| f.status == Delta::Deleted && f.path == "to_delete.txt");
     let has_renamed = staged_files.iter().any(|f| {
-        f.status == 'R'
+        f.status == Delta::Renamed
             && f.path == "renamed.txt"
             && f.old_path == Some("to_rename.txt".to_string())
     });
     let has_added = staged_files
         .iter()
-        .any(|f| f.status == 'A' && f.path == "new_file.txt");
+        .any(|f| matches!(f.status, Delta::Added | Delta::Untracked) && f.path == "new_file.txt");
 
     assert!(has_modified, "modified file should be staged");
     assert!(has_deleted, "deleted file should be staged");

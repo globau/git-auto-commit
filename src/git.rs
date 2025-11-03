@@ -1,7 +1,43 @@
-use crate::changeset::{ChangeSet, FileChange};
 use crate::fatal;
 use git2::{Delta, DiffFindOptions, DiffFormat, DiffOptions, Repository, RepositoryState};
 use std::path::Path;
+
+#[derive(Debug)]
+pub struct FileChange {
+    pub status: Delta,
+    pub path: String,
+    pub old_path: Option<String>, // set for renames (Delta::Renamed)
+    pub diff_ignored: bool,       // lock files, minified files, etc.
+}
+
+/// convert Delta to single-character status code for display
+pub fn status_char(delta: Delta) -> char {
+    match delta {
+        Delta::Added | Delta::Copied | Delta::Untracked => 'A',
+        Delta::Modified | Delta::Typechange => 'M',
+        Delta::Deleted => 'D',
+        Delta::Renamed => 'R',
+        _ => '?',
+    }
+}
+
+/// represents a set of changes (staged or unstaged)
+#[derive(Debug)]
+pub struct ChangeSet {
+    pub files: Vec<FileChange>,
+    pub diff: String,
+    pub is_staged: bool,
+}
+
+impl ChangeSet {
+    pub fn source(&self) -> &str {
+        if self.is_staged {
+            "staged changes"
+        } else {
+            "unstaged changes"
+        }
+    }
+}
 
 /// sanity check that we're in a git repository and in a good state
 pub fn sanity_check() {
@@ -66,15 +102,17 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
     let mut files = Vec::new();
 
     for delta in diff.deltas() {
-        let status = match delta.status() {
-            Delta::Deleted => 'D',
-            Delta::Modified | Delta::Typechange => 'M',
-            Delta::Renamed => 'R',
-            Delta::Added | Delta::Copied | Delta::Untracked => 'A',
-            _ => continue, // skip ignored, unmodified, etc.
-        };
+        let status = delta.status();
 
-        let (path, old_path) = if delta.status() == Delta::Renamed {
+        // skip deltas we don't care about
+        if matches!(
+            status,
+            Delta::Ignored | Delta::Unmodified | Delta::Unreadable | Delta::Conflicted
+        ) {
+            continue;
+        }
+
+        let (path, old_path) = if status == Delta::Renamed {
             // for renames, get both old and new paths
             let new_path = delta.new_file().path();
             let old_path = delta.old_file().path();
@@ -253,13 +291,13 @@ pub fn stage(path: &Path, changeset: &ChangeSet) {
     for file in &changeset.files {
         let path = &file.path;
         match file.status {
-            'D' => {
+            Delta::Deleted => {
                 // deletions: remove from index
                 if let Err(e) = index.remove_path(Path::new(path)) {
                     errors.push(format!("failed to stage deletion of {path}: {e}"));
                 }
             }
-            'R' => {
+            Delta::Renamed => {
                 // renames: remove old path and add new path
                 let old_path = file
                     .old_path
@@ -271,14 +309,18 @@ pub fn stage(path: &Path, changeset: &ChangeSet) {
                     errors.push(format!("failed to stage rename to {path}: {e}"));
                 }
             }
-            'A' | 'M' => {
+            Delta::Added
+            | Delta::Modified
+            | Delta::Copied
+            | Delta::Untracked
+            | Delta::Typechange => {
                 // additions and modifications: add to index
                 if let Err(e) = index.add_path(Path::new(path)) {
                     errors.push(format!("failed to stage {path}: {e}"));
                 }
             }
-            status => {
-                errors.push(format!("unexpected file status: {status}"));
+            _ => {
+                errors.push(format!("unexpected file status: {:?}", file.status));
             }
         }
     }

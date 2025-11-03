@@ -1,4 +1,4 @@
-use crate::changeset::ChangeSet;
+use crate::git::ChangeSet;
 use crate::{fatal, output, warning};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};

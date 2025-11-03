@@ -1,9 +1,8 @@
-mod changeset;
 mod claude;
 mod git;
 mod ui;
 
-use changeset::ChangeSet;
+use crate::git::{ChangeSet, FileChange, status_char};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::IsTerminal;
 use std::path::Path;
@@ -148,7 +147,7 @@ fn generate(
 }
 
 /// display commit description and files
-fn display_commit_info(commit_description: &str, files: &[changeset::FileChange]) {
+fn display_commit_info(commit_description: &str, files: &[FileChange]) {
     use colored::Colorize;
     use std::io::{self, Write};
 
@@ -172,9 +171,9 @@ fn display_commit_info(commit_description: &str, files: &[changeset::FileChange]
     for file in files_to_show {
         if let Some(old_path) = &file.old_path {
             // show renames as "old_path → new_path"
-            output!("{} {} → {}", file.status, old_path, file.path);
+            output!("{} {} → {}", status_char(file.status), old_path, file.path);
         } else {
-            output!("{} {}", file.status, file.path);
+            output!("{} {}", status_char(file.status), file.path);
         }
     }
 

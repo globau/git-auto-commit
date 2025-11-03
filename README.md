@@ -138,7 +138,6 @@ make format          # or cargo fmt
 The codebase is organised into several modules:
 
 - **`src/git.rs`** - Git operations using hybrid approach (`git2` crate for diffs, git binary for commits)
-- **`src/changeset.rs`** - Data structures for representing file changes
 - **`src/ui.rs`** - User interface utilities (prompts, editors, output macros)
 - **`src/claude.rs`** - LLM integration for commit message generation
 - **`src/main.rs`** - Main application workflow and interactive loop
