@@ -9,7 +9,6 @@ A Rust CLI tool that analyses git changes and generates commit messages using Cl
 - Generating intelligent commit descriptions using Claude LLM
 - Providing an interactive interface to accept, edit, or regenerate commit messages
 - Supporting both single-line and multi-line commit formats
-- Intelligently ignoring diffs for binary files, lock files, and minified files
 
 ## Features
 
@@ -19,7 +18,6 @@ A Rust CLI tool that analyses git changes and generates commit messages using Cl
 - **Interactive workflow**: Accept, edit, reroll, or add context to generated messages
 - **Format flexibility**: Toggle between single-line and multi-line commit message formats
 - **Diff filtering**: Automatically skips diffs for binaries, lock files (*.lock, *-lock.json/yaml), and minified files (*.min.js/css)
-- **Git integration**: Supports commit signing and git hooks via native git binary
 
 ## Requirements
 
@@ -106,7 +104,7 @@ M Cargo.toml
 ## Commit message rules
 
 Generated commit messages follow these rules:
-- Maximum 72 characters for the first line
+- Maximum 72 characters per line
 - Start with lowercase letter
 - No period at the end
 - No Claude attribution or metadata
