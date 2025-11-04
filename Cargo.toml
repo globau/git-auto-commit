@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 
 [dependencies]
+anyhow = "1.0"
 colored = "3.0.0"
 crossterm = "0.29.0"
 git2 = { version = "0.20.2", features = ["vendored-libgit2"] }

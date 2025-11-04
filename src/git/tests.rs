@@ -344,7 +344,7 @@ fn test_stage_function_with_deletions_and_renames() {
     }
 
     // stage the changes using our stage() function
-    stage(repo_path, &changeset);
+    stage(repo_path, &changeset).expect("staging should succeed");
 
     // verify all changes are now staged
     let staged_diff = create_staged_diff(&repo).unwrap();

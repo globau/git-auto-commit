@@ -3,6 +3,7 @@ mod git;
 mod ui;
 
 use crate::git::{ChangeSet, FileChange, status_char};
+use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::IsTerminal;
 use std::path::Path;
@@ -12,28 +13,36 @@ const MAX_FILES_TO_SHOW: usize = 10;
 const MAX_AUTO_REROLLS: usize = 3;
 
 fn main() {
+    if let Err(e) = run() {
+        error!("{}", e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     // sanity checks
     if !std::io::stdin().is_terminal()
         || !std::io::stdout().is_terminal()
         || !std::io::stderr().is_terminal()
     {
-        fatal!("interactive terminal required");
+        bail!("interactive terminal required");
     }
-    git::sanity_check();
+    git::sanity_check()?;
 
     // main
-    match git::get_changes(Path::new(".")) {
-        Ok(Some(changeset)) => process_changes(&changeset),
-        Ok(None) => fatal!("no changes found"),
-        Err(e) => fatal!(e),
+    match git::get_changes(Path::new("."))? {
+        Some(changeset) => process_changes(&changeset)?,
+        None => bail!("no changes found"),
     }
+
+    Ok(())
 }
 
-fn process_changes(changeset: &ChangeSet) {
+fn process_changes(changeset: &ChangeSet) -> Result<()> {
     let file_count = changeset.files.len();
     let file_word = if file_count == 1 { "file" } else { "files" };
 
-    title!(
+    status!(
         "generating commit description from {} touching {} {}...",
         changeset.source(),
         file_count,
@@ -43,13 +52,10 @@ fn process_changes(changeset: &ChangeSet) {
     // check diff size and enforce limits
     let diff_size = changeset.diff.len();
     if diff_size > 100 * 1024 {
-        fatal!("diff is too large ({} chars, max 100k)", diff_size);
+        bail!("diff is too large ({diff_size} chars, max 100k)");
     } else if diff_size > 50 * 1024 {
-        warning!(
-            "diff is large ({} chars), this may use many tokens",
-            diff_size
-        );
-        let response = ui::prompt(&["continue", "abort"]);
+        warning!("diff is large ({diff_size} chars), this may use many tokens");
+        let response = ui::prompt(&["continue", "abort"])?;
         if response == "a" {
             std::process::exit(1);
         }
@@ -123,13 +129,13 @@ fn process_changes(changeset: &ChangeSet) {
             "edit",
             "prompt",
         ];
-        let action = ui::prompt(&options);
+        let action = ui::prompt(&options)?;
         match handle_user_action(
             &action,
             &mut commit_description,
             &mut multi_line,
             &mut prompt_extra,
-        ) {
+        )? {
             UserAction::Commit => break,
             UserAction::Exit => std::process::exit(1),
             UserAction::Reroll => {
@@ -143,9 +149,11 @@ fn process_changes(changeset: &ChangeSet) {
 
     // commit
     if !changeset.is_staged {
-        git::stage(Path::new("."), changeset);
+        git::stage(Path::new("."), changeset)?;
     }
-    git::commit(Path::new("."), &commit_description);
+    git::commit(Path::new("."), &commit_description)?;
+
+    Ok(())
 }
 
 enum UserAction {
@@ -166,7 +174,7 @@ fn generate(
     spinner.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner}")
-            .unwrap(),
+            .expect("invalid spinner template"),
     );
     spinner.enable_steady_tick(std::time::Duration::from_millis(100));
 
@@ -201,26 +209,26 @@ fn display_commit_info(commit_description: &str, files: &[FileChange]) {
     }
     let _ = writeln!(io::stdout());
 
-    title!("files:");
+    status!("files:");
 
     let files_to_show = files.iter().take(MAX_FILES_TO_SHOW);
 
     for file in files_to_show {
         if let Some(old_path) = &file.old_path {
             // show renames as "old_path → new_path"
-            output!("{} {} → {}", status_char(file.status), old_path, file.path);
+            info!("{} {} → {}", status_char(file.status), old_path, file.path);
         } else {
-            output!("{} {}", status_char(file.status), file.path);
+            info!("{} {}", status_char(file.status), file.path);
         }
     }
 
     // show count of remaining files if there are more than MAX_FILES_TO_SHOW
     if files.len() > MAX_FILES_TO_SHOW {
         let remaining = files.len() - MAX_FILES_TO_SHOW;
-        output!("(+{} more)", remaining);
+        info!("(+{} more)", remaining);
     }
 
-    output!();
+    info!();
 }
 
 /// handle user action and return what to do next
@@ -229,52 +237,52 @@ fn handle_user_action(
     commit_description: &mut String,
     multi_line: &mut bool,
     prompt_extra: &mut String,
-) -> UserAction {
+) -> Result<UserAction> {
     match action {
-        "y" => UserAction::Commit,
-        "n" => UserAction::Exit,
+        "y" => Ok(UserAction::Commit),
+        "n" => Ok(UserAction::Exit),
         "r" => {
-            title!("rerolling...");
-            UserAction::Reroll
+            status!("rerolling...");
+            Ok(UserAction::Reroll)
         }
         "s" => {
             *multi_line = false;
             *commit_description = commit_description.lines().next().unwrap_or("").to_string();
-            title!("updating...");
-            UserAction::Continue
+            status!("updating...");
+            Ok(UserAction::Continue)
         }
         "l" => {
             *multi_line = true;
-            title!("thinking...");
-            UserAction::Reroll
+            status!("thinking...");
+            Ok(UserAction::Reroll)
         }
         "e" => {
             *commit_description = if *multi_line {
-                ui::edit_multi_line(commit_description)
+                ui::edit_multi_line(commit_description)?
             } else {
-                output!("");
-                ui::edit_one_line(commit_description)
+                info!("");
+                ui::edit_one_line(commit_description)?
             };
             if commit_description.trim().is_empty() {
                 std::process::exit(3);
             }
-            title!("updating...");
-            UserAction::Continue
+            status!("updating...");
+            Ok(UserAction::Continue)
         }
         "p" => {
-            title!("provide extra claude prompt context:");
+            status!("provide extra claude prompt context:");
             for line in claude::get_prompt(*multi_line).lines() {
-                output!("> {}", line);
+                info!("> {}", line);
             }
             let old_prompt_extra = prompt_extra.clone();
-            *prompt_extra = ui::edit_one_line(prompt_extra.as_str());
-            title!("thinking...");
+            *prompt_extra = ui::edit_one_line(prompt_extra.as_str())?;
+            status!("thinking...");
             if *prompt_extra == old_prompt_extra {
-                UserAction::Continue
+                Ok(UserAction::Continue)
             } else {
-                UserAction::Reroll
+                Ok(UserAction::Reroll)
             }
         }
-        _ => UserAction::Continue,
+        _ => Ok(UserAction::Continue),
     }
 }

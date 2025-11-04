@@ -1,9 +1,13 @@
 use crate::git::ChangeSet;
-use crate::{fatal, output, warning};
+use crate::{info, warning};
+use anyhow::{Result, bail};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
+
+const CLAUDE_TIMEOUT_SECS: u64 = 30;
+const CLAUDE_FAILURE_EXIT_CODE: i32 = 5;
 
 pub fn get_prompt(multi_line: bool) -> String {
     let base = r#"
@@ -60,7 +64,7 @@ pub fn generate(
     multi_line: bool,
     think_hard: bool,
     prompt_extra: &str,
-) -> Result<String, String> {
+) -> Result<String> {
     let prompt = get_prompt(multi_line);
 
     let mut input = String::new();
@@ -77,16 +81,13 @@ pub fn generate(
     input.push_str(&changeset.diff);
 
     // spawn claude process
-    let mut child = match Command::new("claude")
+    let mut child = Command::new("claude")
         .arg("--print")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-    {
-        Ok(child) => child,
-        Err(e) => fatal!("failed to spawn claude process: {}", e; 5),
-    };
+        .map_err(|e| anyhow::anyhow!("failed to spawn claude process: {e}"))?;
 
     // write input to stdin and close it
     if let Some(mut stdin) = child.stdin.take()
@@ -94,15 +95,21 @@ pub fn generate(
     {
         let _ = child.kill();
         let _ = child.wait();
-        fatal!("failed to write to claude stdin: {}", e; 5);
+        bail!("failed to write to claude stdin: {e}");
     }
 
     // take stdout and stderr handles
-    let mut stdout = child.stdout.take().expect("failed to take stdout");
-    let mut stderr = child.stderr.take().expect("failed to take stderr");
+    let mut stdout = child
+        .stdout
+        .take()
+        .expect("failed to take stdout from child process");
+    let mut stderr = child
+        .stderr
+        .take()
+        .expect("failed to take stderr from child process");
 
     // wait for process to complete with timeout
-    let timeout = Duration::from_secs(30);
+    let timeout = Duration::from_secs(CLAUDE_TIMEOUT_SECS);
     match child.wait_timeout(timeout) {
         Ok(Some(status)) => {
             // process completed within timeout, read output
@@ -118,12 +125,12 @@ pub fn generate(
 
             if !status.success() {
                 if !stdout_data.is_empty() {
-                    output!("{}", String::from_utf8_lossy(&stdout_data).trim());
+                    info!("{}", String::from_utf8_lossy(&stdout_data).trim());
                 }
                 if !stderr_data.is_empty() {
-                    output!("{}", String::from_utf8_lossy(&stderr_data).trim());
+                    info!("{}", String::from_utf8_lossy(&stderr_data).trim());
                 }
-                fatal!("claude failed"; 5);
+                std::process::exit(CLAUDE_FAILURE_EXIT_CODE);
             }
 
             Ok(String::from_utf8_lossy(&stdout_data).trim().to_string())
@@ -134,8 +141,8 @@ pub fn generate(
                 warning!("failed to kill claude process: {}", e);
             }
             let _ = child.wait();
-            Err("claude thought for too long".to_string())
+            bail!("claude thought for too long")
         }
-        Err(e) => fatal!("failed to wait for claude process: {}", e; 5),
+        Err(e) => bail!("failed to wait for claude process: {e}"),
     }
 }

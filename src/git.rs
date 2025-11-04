@@ -1,6 +1,8 @@
-use crate::fatal;
+use anyhow::{Context, Result, bail};
 use git2::{Delta, DiffFindOptions, DiffFormat, DiffOptions, Repository, RepositoryState};
 use std::path::Path;
+
+const RENAME_SIMILARITY_THRESHOLD: u16 = 50;
 
 #[derive(Debug)]
 pub struct FileChange {
@@ -40,35 +42,35 @@ impl ChangeSet {
 }
 
 /// sanity check that we're in a git repository and in a good state
-pub fn sanity_check() {
+pub fn sanity_check() -> Result<()> {
     // check we're in a git repository (can be anywhere within the repo)
-    let repo = match Repository::discover(".") {
-        Ok(repo) => repo,
-        Err(e) => fatal!("not in a git repository: {}", e),
-    };
+    let repo = Repository::discover(".").context("not in a git repository")?;
 
     // check we're not in the middle of a git operation
     if repo.state() != RepositoryState::Clean {
-        fatal!("repository is in the middle of an operation (merge, rebase, etc)");
+        bail!("repository is in the middle of an operation (merge, rebase, etc)");
     }
 
     // check we're not on a detached HEAD
     if repo.head_detached().unwrap_or(false) {
-        fatal!("repository is in detached HEAD state");
+        bail!("repository is in detached HEAD state");
     }
+
+    Ok(())
 }
 
 /// get changes from the repository
 /// checks staged changes first, falls back to unstaged (including untracked files)
 /// returns None if no changes found
-pub fn get_changes(path: &Path) -> Result<Option<ChangeSet>, String> {
-    let repo = Repository::open(path).map_err(|e| format!("failed to open git repository: {e}"))?;
+pub fn get_changes(path: &Path) -> Result<Option<ChangeSet>> {
+    let repo = Repository::open(path)
+        .map_err(|e| anyhow::anyhow!("failed to open git repository: {e}"))?;
 
     // try staged changes first
     let staged_diff = create_staged_diff(&repo)?;
     if staged_diff
         .stats()
-        .map_err(|e| format!("failed to get diff stats: {e}"))?
+        .map_err(|e| anyhow::anyhow!("failed to get diff stats: {e}"))?
         .files_changed()
         > 0
     {
@@ -116,7 +118,7 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
             // for renames, get both old and new paths
             let new_path = delta.new_file().path();
             let old_path = delta.old_file().path();
-            (new_path, old_path.map(|p| p.to_string_lossy().to_string()))
+            (new_path, old_path.map(|p| p.to_string_lossy().into_owned()))
         } else if delta.status() == Delta::Deleted {
             (delta.old_file().path(), None)
         } else {
@@ -124,7 +126,7 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
         };
 
         if let Some(path) = path {
-            let path_str = path.to_string_lossy().to_string();
+            let path_str = path.to_string_lossy().into_owned();
 
             // check if diff should be ignored (lock files, minified files, binary files)
             let is_binary = delta.new_file().is_binary() || delta.old_file().is_binary();
@@ -143,49 +145,49 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
 }
 
 /// create a diff object for staged changes
-fn create_staged_diff(repo: &Repository) -> Result<git2::Diff<'_>, String> {
+fn create_staged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
     // handle unborn branch (no commits yet) - compare against empty tree
     let tree = match repo.head() {
         Ok(head) => Some(
             head.peel_to_tree()
-                .map_err(|e| format!("failed to get tree: {e}"))?,
+                .map_err(|e| anyhow::anyhow!("failed to get tree: {e}"))?,
         ),
         Err(e) if e.code() == git2::ErrorCode::UnbornBranch => None,
-        Err(e) => return Err(format!("failed to get HEAD: {e}")),
+        Err(e) => bail!("failed to get HEAD: {e}"),
     };
 
     let mut diff = repo
         .diff_tree_to_index(tree.as_ref(), None, None)
-        .map_err(|e| format!("failed to create diff: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;
 
     // enable rename detection with lower threshold for better detection
     let mut find_opts = DiffFindOptions::new();
     find_opts.renames(true);
-    find_opts.rename_threshold(50); // 50% similarity (git default)
-    find_opts.copy_threshold(50);
+    find_opts.rename_threshold(RENAME_SIMILARITY_THRESHOLD);
+    find_opts.copy_threshold(RENAME_SIMILARITY_THRESHOLD);
     diff.find_similar(Some(&mut find_opts))
-        .map_err(|e| format!("failed to detect renames: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to detect renames: {e}"))?;
 
     Ok(diff)
 }
 
 /// create a diff object for unstaged changes
-fn create_unstaged_diff(repo: &Repository) -> Result<git2::Diff<'_>, String> {
+fn create_unstaged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
     let mut opts = DiffOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
     opts.show_untracked_content(true);
     let mut diff = repo
         .diff_index_to_workdir(None, Some(&mut opts))
-        .map_err(|e| format!("failed to create diff: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;
 
     // enable rename detection with lower threshold for better detection
     let mut find_opts = DiffFindOptions::new();
     find_opts.renames(true);
-    find_opts.rename_threshold(50); // 50% similarity (git default)
-    find_opts.copy_threshold(50);
+    find_opts.rename_threshold(RENAME_SIMILARITY_THRESHOLD);
+    find_opts.copy_threshold(RENAME_SIMILARITY_THRESHOLD);
     diff.find_similar(Some(&mut find_opts))
-        .map_err(|e| format!("failed to detect renames: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to detect renames: {e}"))?;
 
     Ok(diff)
 }
@@ -221,7 +223,7 @@ fn should_ignore_diff(path: &str) -> bool {
 }
 
 /// format a diff object into unified diff string, skipping ignored files
-fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String, String> {
+fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
     let mut output = String::new();
     let mut current_file: Option<String> = None;
     let mut skip_current_file = false;
@@ -233,7 +235,7 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String, String
         if origin == 'F'
             && let Some(path) = delta.new_file().path()
         {
-            let path_str = path.to_string_lossy().to_string();
+            let path_str = path.to_string_lossy().into_owned();
             current_file = Some(path_str.clone());
 
             // check if this file should be ignored based on files list
@@ -268,21 +270,18 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String, String
         output.push_str(content);
         true
     })
-    .map_err(|e| format!("failed to format diff: {e}"))?;
+    .map_err(|e| anyhow::anyhow!("failed to format diff: {e}"))?;
 
     Ok(output.trim_end_matches('\n').to_string())
 }
 
 /// stage all files in the changeset
-pub fn stage(path: &Path, changeset: &ChangeSet) {
-    let repo = match Repository::open(path) {
-        Ok(repo) => repo,
-        Err(e) => fatal!("failed to open git repository: {}", e),
-    };
-    let mut index = match repo.index() {
-        Ok(index) => index,
-        Err(e) => fatal!("failed to get git index: {}", e),
-    };
+pub fn stage(path: &Path, changeset: &ChangeSet) -> Result<()> {
+    let repo = Repository::open(path)
+        .map_err(|e| anyhow::anyhow!("failed to open git repository: {e}"))?;
+    let mut index = repo
+        .index()
+        .map_err(|e| anyhow::anyhow!("failed to get git index: {e}"))?;
 
     // collect all errors before writing index
     let mut errors = Vec::new();
@@ -334,36 +333,35 @@ pub fn stage(path: &Path, changeset: &ChangeSet) {
         for error in &errors {
             crate::error!("{}", error);
         }
-        fatal!("failed to stage files");
+        bail!("failed to stage files");
     }
 
     // write the index to disk
-    if let Err(e) = index.write() {
-        fatal!("failed to write git index: {}", e);
-    }
+    index
+        .write()
+        .map_err(|e| anyhow::anyhow!("failed to write git index: {e}"))?;
+
+    Ok(())
 }
 
 /// create a commit with the given message
 ///
 /// uses the git binary rather than git2 to ensure commit signing (gpg/ssh)
 /// and git hooks (pre-commit, commit-msg, etc.) work as expected
-pub fn commit(path: &Path, commit_description: &str) {
+pub fn commit(path: &Path, commit_description: &str) -> Result<()> {
     let status = std::process::Command::new("git")
         .arg("commit")
         .arg("--message")
         .arg(commit_description)
         .current_dir(path)
-        .status();
+        .status()
+        .map_err(|e| anyhow::anyhow!("failed to run git commit: {e}"))?;
 
-    match status {
-        Ok(exit_status) if exit_status.success() => {}
-        Ok(exit_status) => {
-            fatal!("git commit failed with exit code: {}", exit_status);
-        }
-        Err(e) => {
-            fatal!("failed to run git commit: {}", e);
-        }
+    if !status.success() {
+        bail!("git commit failed with exit code: {status}");
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
