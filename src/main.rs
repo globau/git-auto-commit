@@ -1,16 +1,17 @@
 mod claude;
+mod constants;
 mod git;
 mod ui;
 
+use crate::constants::{
+    DIFF_WARNING_SIZE_BYTES, MAX_AUTO_REROLLS, MAX_DIFF_SIZE_BYTES, MAX_FILES_TO_SHOW,
+    MAX_LINE_LENGTH,
+};
 use crate::git::{ChangeSet, FileChange, status_char};
 use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::IsTerminal;
 use std::path::Path;
-
-const MAX_LINE_LENGTH: usize = 72;
-const MAX_FILES_TO_SHOW: usize = 10;
-const MAX_AUTO_REROLLS: usize = 3;
 
 fn main() {
     if let Err(e) = run() {
@@ -51,9 +52,12 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
 
     // check diff size and enforce limits
     let diff_size = changeset.diff.len();
-    if diff_size > 100 * 1024 {
-        bail!("diff is too large ({diff_size} chars, max 100k)");
-    } else if diff_size > 50 * 1024 {
+    if diff_size > MAX_DIFF_SIZE_BYTES {
+        bail!(
+            "diff is too large ({diff_size} chars, max {}k)",
+            MAX_DIFF_SIZE_BYTES / 1024
+        );
+    } else if diff_size > DIFF_WARNING_SIZE_BYTES {
         warning!("diff is large ({diff_size} chars), this may use many tokens");
         let response = ui::prompt(&["continue", "abort"])?;
         if response == "a" {
@@ -296,7 +300,7 @@ fn handle_user_action(
                 ui::edit_one_line(commit_description)?
             };
             if commit_description.trim().is_empty() {
-                std::process::exit(3);
+                std::process::exit(1);
             }
             status!("updating...");
             Ok(UserAction::Continue)

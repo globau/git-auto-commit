@@ -1,2 +1,3 @@
 # clippy configuration options
 allow-one-hash-in-raw-strings = true
+too-many-lines-threshold = 200

@@ -1,3 +1,4 @@
+use crate::constants::{CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH};
 use crate::git::ChangeSet;
 use crate::{info, warning};
 use anyhow::{Result, bail};
@@ -6,18 +7,16 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
-const CLAUDE_TIMEOUT_SECS: u64 = 30;
-const CLAUDE_FAILURE_EXIT_CODE: i32 = 5;
-
 pub fn get_prompt(multi_line: bool) -> String {
-    let base = r#"
+    let base = format!(
+        r#"
 generate a commit description for the diff which follows the rules.
 the rules MUST be followed; cross-check generated commit descriptions against
 these rules and retry if any rule is not honoured.
 
 - the first line of the commit description must:
     - be a one-line summary
-    - not exceed 72 characters in length
+    - not exceed {MAX_LINE_LENGTH} characters in length
     - start with a lowercase character
 - this commit description must ONLY contain the changes, without any Claude
   attribution (no "Generated with" or "Co-Authored-By" or similar)
@@ -31,20 +30,24 @@ these rules and retry if any rule is not honoured.
   reason for the changes.  do not just describe the diff; let the code speak
   for itself
 "#
-    .trim();
+    )
+    .trim()
+    .to_string();
 
     if multi_line {
         format!(
             "{}\n{}",
             base,
-            r#"
+            format!(
+                r#"
 - the description body must be in bullet point form
-- the description body must be wrapped to 72 chars, following markdown's
+- the description body must be wrapped to {MAX_LINE_LENGTH} chars, following markdown's
   indentation rules
 - bullet points must:
     - start with lowercase characters
     - not end with periods
 "#
+            )
             .trim()
         )
     } else {
@@ -130,7 +133,7 @@ pub fn generate(
                 if !stderr_data.is_empty() {
                     info!("{}", String::from_utf8_lossy(&stderr_data).trim());
                 }
-                std::process::exit(CLAUDE_FAILURE_EXIT_CODE);
+                std::process::exit(1);
             }
 
             Ok(String::from_utf8_lossy(&stdout_data).trim().to_string())
