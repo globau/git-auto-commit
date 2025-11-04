@@ -196,15 +196,47 @@ fn display_commit_info(commit_description: &str, files: &[FileChange]) {
     use colored::Colorize;
     use std::io::{self, Write};
 
+    /// print text with "claude" (case insensitive) highlighted in yellow
+    fn print_with_claude_highlighted(text: &str) {
+        let lower = text.to_lowercase();
+        let mut last_end = 0;
+
+        while let Some(pos) = lower[last_end..].find("claude") {
+            let absolute_pos = last_end + pos;
+
+            // print the part before "claude"
+            let before = &text[last_end..absolute_pos];
+            if !before.is_empty() {
+                let _ = write!(io::stdout(), "{before}");
+            }
+
+            // print "claude" in yellow
+            let claude_end = absolute_pos + "claude".len();
+            let claude_part = &text[absolute_pos..claude_end];
+            let _ = write!(io::stdout(), "{}", claude_part.yellow());
+
+            last_end = claude_end;
+        }
+
+        // print the remaining part
+        if last_end < text.len() {
+            let remaining = &text[last_end..];
+            let _ = write!(io::stdout(), "{remaining}");
+        }
+    }
+
     // print each line of commit description, highlighting chars beyond MAX_LINE_LENGTH-1 in red
+    // and highlighting "claude" in yellow (red overrides yellow for long lines)
     let _ = writeln!(io::stdout());
     for line in commit_description.lines() {
         if line.len() <= MAX_LINE_LENGTH {
-            let _ = writeln!(io::stdout(), "{line}");
+            print_with_claude_highlighted(line);
+            let _ = writeln!(io::stdout());
         } else {
             let (first_part, rest) = line.split_at(MAX_LINE_LENGTH);
-            let _ = write!(io::stdout(), "{first_part}");
-            let _ = writeln!(io::stdout(), "{}", rest.red());
+            print_with_claude_highlighted(first_part);
+            let _ = write!(io::stdout(), "{}", rest.red());
+            let _ = writeln!(io::stdout());
         }
     }
     let _ = writeln!(io::stdout());
