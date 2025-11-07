@@ -4,12 +4,13 @@ mod git;
 mod ui;
 
 use crate::constants::{
-    DIFF_WARNING_SIZE_BYTES, MAX_AUTO_REROLLS, MAX_DIFF_SIZE_BYTES, MAX_FILES_TO_SHOW,
-    MAX_LINE_LENGTH,
+    DEFAULT_CONTEXT, DIFF_SIZE_MAXIMUM_BYTES, DIFF_SIZE_WARNING_BYTES, LESS_CONTEXT,
+    MAX_AUTO_REROLLS, MAX_FILES_TO_SHOW, MAX_LINE_LENGTH,
 };
 use crate::git::{ChangeSet, FileChange, status_char};
 use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
+use num_format::{Locale, ToFormattedString};
 use std::io::IsTerminal;
 use std::path::Path;
 
@@ -30,12 +31,45 @@ fn run() -> Result<()> {
     }
     git::sanity_check()?;
 
-    // main
-    match git::get_changes(Path::new("."))? {
-        Some(changeset) => process_changes(&changeset)?,
-        None => bail!("no changes found"),
-    }
+    // main - try with default context first, reduce if necessary
+    let mut context_lines = DEFAULT_CONTEXT;
 
+    let changeset = loop {
+        match git::get_changes(Path::new("."), context_lines)? {
+            Some(cs) => {
+                let diff_size = cs.diff.len();
+
+                if diff_size <= DIFF_SIZE_WARNING_BYTES {
+                    // diff is acceptable size, use it
+                    break cs;
+                }
+                if diff_size > DIFF_SIZE_WARNING_BYTES && context_lines == DEFAULT_CONTEXT {
+                    // diff is too large, try with less context
+                    context_lines = LESS_CONTEXT;
+                    continue;
+                }
+
+                let diff_size_str = diff_size.to_formatted_string(&Locale::en);
+
+                // already tried with less context, check maximum and warn
+                if diff_size > DIFF_SIZE_MAXIMUM_BYTES {
+                    bail!(
+                        "diff is too large ({diff_size_str} chars, max {}k)",
+                        DIFF_SIZE_MAXIMUM_BYTES / 1024
+                    );
+                }
+                warning!("diff is large ({diff_size_str} chars), this may use many tokens");
+                let response = ui::prompt(&["continue", "abort"])?;
+                if response == "a" {
+                    std::process::exit(1);
+                }
+                break cs;
+            }
+            None => bail!("no changes found"),
+        }
+    };
+
+    process_changes(&changeset)?;
     Ok(())
 }
 
@@ -49,21 +83,6 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
         file_count,
         file_word
     );
-
-    // check diff size and enforce limits
-    let diff_size = changeset.diff.len();
-    if diff_size > MAX_DIFF_SIZE_BYTES {
-        bail!(
-            "diff is too large ({diff_size} chars, max {}k)",
-            MAX_DIFF_SIZE_BYTES / 1024
-        );
-    } else if diff_size > DIFF_WARNING_SIZE_BYTES {
-        warning!("diff is large ({diff_size} chars), this may use many tokens");
-        let response = ui::prompt(&["continue", "abort"])?;
-        if response == "a" {
-            std::process::exit(1);
-        }
-    }
 
     let mut multi_line = false;
     let mut think_hard = false;

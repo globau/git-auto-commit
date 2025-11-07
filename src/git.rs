@@ -62,12 +62,12 @@ pub fn sanity_check() -> Result<()> {
 /// get changes from the repository
 /// checks staged changes first, falls back to unstaged (including untracked files)
 /// returns None if no changes found
-pub fn get_changes(path: &Path) -> Result<Option<ChangeSet>> {
+pub fn get_changes(path: &Path, context_lines: u32) -> Result<Option<ChangeSet>> {
     let repo = Repository::open(path)
         .map_err(|e| anyhow::anyhow!("failed to open git repository: {e}"))?;
 
     // try staged changes first
-    let staged_diff = create_staged_diff(&repo)?;
+    let staged_diff = create_staged_diff(&repo, context_lines)?;
     if staged_diff
         .stats()
         .map_err(|e| anyhow::anyhow!("failed to get diff stats: {e}"))?
@@ -84,7 +84,7 @@ pub fn get_changes(path: &Path) -> Result<Option<ChangeSet>> {
     }
 
     // no staged changes, try unstaged (includes untracked files)
-    let unstaged_diff = create_unstaged_diff(&repo)?;
+    let unstaged_diff = create_unstaged_diff(&repo, context_lines)?;
     let files = files_from_git_diff(&unstaged_diff);
 
     if files.is_empty() {
@@ -145,7 +145,7 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
 }
 
 /// create a diff object for staged changes
-fn create_staged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
+fn create_staged_diff(repo: &Repository, context_lines: u32) -> Result<git2::Diff<'_>> {
     // handle unborn branch (no commits yet) - compare against empty tree
     let tree = match repo.head() {
         Ok(head) => Some(
@@ -156,8 +156,11 @@ fn create_staged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
         Err(e) => bail!("failed to get HEAD: {e}"),
     };
 
+    let mut opts = DiffOptions::new();
+    opts.context_lines(context_lines);
+
     let mut diff = repo
-        .diff_tree_to_index(tree.as_ref(), None, None)
+        .diff_tree_to_index(tree.as_ref(), None, Some(&mut opts))
         .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;
 
     // enable rename detection with lower threshold for better detection
@@ -172,11 +175,12 @@ fn create_staged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
 }
 
 /// create a diff object for unstaged changes
-fn create_unstaged_diff(repo: &Repository) -> Result<git2::Diff<'_>> {
+fn create_unstaged_diff(repo: &Repository, context_lines: u32) -> Result<git2::Diff<'_>> {
     let mut opts = DiffOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
     opts.show_untracked_content(true);
+    opts.context_lines(context_lines);
     let mut diff = repo
         .diff_index_to_workdir(None, Some(&mut opts))
         .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;

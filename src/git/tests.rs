@@ -76,7 +76,7 @@ fn test_file_rename() {
     index.write().unwrap();
 
     // get changes - should detect rename
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
 
     assert!(changes.is_some());
     let changeset = changes.unwrap();
@@ -124,7 +124,7 @@ fn test_file_move_to_subdirectory() {
     index.write().unwrap();
 
     // get changes
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
 
     assert!(changes.is_some());
     let changeset = changes.unwrap();
@@ -179,7 +179,7 @@ fn test_mixed_operations() {
     index.write().unwrap();
 
     // get changes
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
 
     assert!(changes.is_some());
     let changeset = changes.unwrap();
@@ -223,7 +223,7 @@ fn test_binary_file_is_ignored() {
     index.write().unwrap();
 
     // get changes
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
 
     assert!(changes.is_some());
     let changeset = changes.unwrap();
@@ -278,7 +278,7 @@ fn test_lock_file_is_ignored() {
     index.write().unwrap();
 
     // get changes
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
 
     assert!(changes.is_some());
     let changeset = changes.unwrap();
@@ -330,7 +330,7 @@ fn test_stage_function_with_deletions_and_renames() {
     create_file(&repo_path.join("new_file.txt"), "new"); // add
 
     // get unstaged changes
-    let changes = get_changes(repo_path).unwrap();
+    let changes = get_changes(repo_path, crate::constants::DEFAULT_CONTEXT).unwrap();
     assert!(changes.is_some());
     let changeset = changes.unwrap();
     assert!(!changeset.is_staged, "changes should be unstaged");
@@ -347,7 +347,7 @@ fn test_stage_function_with_deletions_and_renames() {
     stage(repo_path, &changeset).expect("staging should succeed");
 
     // verify all changes are now staged
-    let staged_diff = create_staged_diff(&repo).unwrap();
+    let staged_diff = create_staged_diff(&repo, crate::constants::DEFAULT_CONTEXT).unwrap();
     let staged_files = files_from_git_diff(&staged_diff);
 
     println!("After staging - {} staged file(s):", staged_files.len());
