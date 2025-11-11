@@ -1,8 +1,20 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use git2::{Delta, DiffFindOptions, DiffFormat, DiffOptions, Repository, RepositoryState};
 use std::path::Path;
 
 const RENAME_SIMILARITY_THRESHOLD: u16 = 50;
+
+// trait extension to get clean error messages from git2 errors
+// (strips the ugly "class=X; code=Y" suffix)
+trait Git2ErrorExt {
+    fn clean(&self) -> String;
+}
+
+impl Git2ErrorExt for git2::Error {
+    fn clean(&self) -> String {
+        self.message().to_string()
+    }
+}
 
 #[derive(Debug)]
 pub struct FileChange {
@@ -44,7 +56,8 @@ impl ChangeSet {
 /// sanity check that we're in a git repository and in a good state
 pub fn sanity_check() -> Result<()> {
     // check we're in a git repository (can be anywhere within the repo)
-    let repo = Repository::discover(".").context("not in a git repository")?;
+    let repo = Repository::discover(".")
+        .map_err(|e| anyhow::anyhow!("not in a git repository: {}", e.clean()))?;
 
     // check we're not in the middle of a git operation
     if repo.state() != RepositoryState::Clean {
@@ -64,13 +77,13 @@ pub fn sanity_check() -> Result<()> {
 /// returns None if no changes found
 pub fn get_changes(path: &Path, context_lines: u32) -> Result<Option<ChangeSet>> {
     let repo = Repository::open(path)
-        .map_err(|e| anyhow::anyhow!("failed to open git repository: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to open git repository: {}", e.clean()))?;
 
     // try staged changes first
     let staged_diff = create_staged_diff(&repo, context_lines)?;
     if staged_diff
         .stats()
-        .map_err(|e| anyhow::anyhow!("failed to get diff stats: {e}"))?
+        .map_err(|e| anyhow::anyhow!("failed to get diff stats: {}", e.clean()))?
         .files_changed()
         > 0
     {
@@ -150,10 +163,10 @@ fn create_staged_diff(repo: &Repository, context_lines: u32) -> Result<git2::Dif
     let tree = match repo.head() {
         Ok(head) => Some(
             head.peel_to_tree()
-                .map_err(|e| anyhow::anyhow!("failed to get tree: {e}"))?,
+                .map_err(|e| anyhow::anyhow!("failed to get tree: {}", e.clean()))?,
         ),
         Err(e) if e.code() == git2::ErrorCode::UnbornBranch => None,
-        Err(e) => bail!("failed to get HEAD: {e}"),
+        Err(e) => bail!("failed to get HEAD: {}", e.clean()),
     };
 
     let mut opts = DiffOptions::new();
@@ -161,7 +174,7 @@ fn create_staged_diff(repo: &Repository, context_lines: u32) -> Result<git2::Dif
 
     let mut diff = repo
         .diff_tree_to_index(tree.as_ref(), None, Some(&mut opts))
-        .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to create diff: {}", e.clean()))?;
 
     // enable rename detection with lower threshold for better detection
     let mut find_opts = DiffFindOptions::new();
@@ -169,7 +182,7 @@ fn create_staged_diff(repo: &Repository, context_lines: u32) -> Result<git2::Dif
     find_opts.rename_threshold(RENAME_SIMILARITY_THRESHOLD);
     find_opts.copy_threshold(RENAME_SIMILARITY_THRESHOLD);
     diff.find_similar(Some(&mut find_opts))
-        .map_err(|e| anyhow::anyhow!("failed to detect renames: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to detect renames: {}", e.clean()))?;
 
     Ok(diff)
 }
@@ -183,7 +196,7 @@ fn create_unstaged_diff(repo: &Repository, context_lines: u32) -> Result<git2::D
     opts.context_lines(context_lines);
     let mut diff = repo
         .diff_index_to_workdir(None, Some(&mut opts))
-        .map_err(|e| anyhow::anyhow!("failed to create diff: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to create diff: {}", e.clean()))?;
 
     // enable rename detection with lower threshold for better detection
     let mut find_opts = DiffFindOptions::new();
@@ -191,7 +204,7 @@ fn create_unstaged_diff(repo: &Repository, context_lines: u32) -> Result<git2::D
     find_opts.rename_threshold(RENAME_SIMILARITY_THRESHOLD);
     find_opts.copy_threshold(RENAME_SIMILARITY_THRESHOLD);
     diff.find_similar(Some(&mut find_opts))
-        .map_err(|e| anyhow::anyhow!("failed to detect renames: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to detect renames: {}", e.clean()))?;
 
     Ok(diff)
 }
@@ -274,7 +287,7 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
         output.push_str(content);
         true
     })
-    .map_err(|e| anyhow::anyhow!("failed to format diff: {e}"))?;
+    .map_err(|e| anyhow::anyhow!("failed to format diff: {}", e.clean()))?;
 
     Ok(output.trim_end_matches('\n').to_string())
 }
@@ -282,10 +295,10 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
 /// stage all files in the changeset
 pub fn stage(path: &Path, changeset: &ChangeSet) -> Result<()> {
     let repo = Repository::open(path)
-        .map_err(|e| anyhow::anyhow!("failed to open git repository: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to open git repository: {}", e.clean()))?;
     let mut index = repo
         .index()
-        .map_err(|e| anyhow::anyhow!("failed to get git index: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to get git index: {}", e.clean()))?;
 
     // collect all errors before writing index
     let mut errors = Vec::new();
@@ -343,7 +356,7 @@ pub fn stage(path: &Path, changeset: &ChangeSet) -> Result<()> {
     // write the index to disk
     index
         .write()
-        .map_err(|e| anyhow::anyhow!("failed to write git index: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to write git index: {}", e.clean()))?;
 
     Ok(())
 }
