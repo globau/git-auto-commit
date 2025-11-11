@@ -90,6 +90,7 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
     let mut prompt_extra = String::new();
     let mut commit_description = String::from("bug fixes and/or improvements");
     let mut auto_reroll_count = 0;
+    let mut user_edited = false;
 
     loop {
         // regenerate commit desc, if required
@@ -99,6 +100,7 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
                 warning!("generated description is empty, using fallback");
             } else {
                 commit_description = desc;
+                user_edited = false;
             }
         }
         regenerate = true;
@@ -108,32 +110,35 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
         display_commit_info(&commit_description, &changeset.files);
 
         // auto-reroll long lines (claude frequently ignores the 72 char limit)
-        let any_line_too_long = commit_description
-            .lines()
-            .any(|line| line.len() > MAX_LINE_LENGTH);
-        if any_line_too_long {
-            let message = format!(
-                "commit message {} longer than {} chars",
-                if commit_description.lines().count() > 1 {
-                    "has lines"
-                } else {
-                    "is"
-                },
-                MAX_LINE_LENGTH
-            );
-            if auto_reroll_count >= MAX_AUTO_REROLLS {
-                error!(
-                    "{} (not auto-rerolling after {} attempts)",
-                    message, MAX_AUTO_REROLLS
+        // but only if the description was not user-edited
+        if !user_edited {
+            let any_line_too_long = commit_description
+                .lines()
+                .any(|line| line.len() > MAX_LINE_LENGTH);
+            if any_line_too_long {
+                let message = format!(
+                    "commit message {} longer than {} chars",
+                    if commit_description.lines().count() > 1 {
+                        "has lines"
+                    } else {
+                        "is"
+                    },
+                    MAX_LINE_LENGTH
                 );
-            } else {
-                error!("{}, rerolling...", message);
-                auto_reroll_count += 1;
-                think_hard = true;
-                continue;
+                if auto_reroll_count >= MAX_AUTO_REROLLS {
+                    error!(
+                        "{} (not auto-rerolling after {} attempts)",
+                        message, MAX_AUTO_REROLLS
+                    );
+                } else {
+                    error!("{}, rerolling...", message);
+                    auto_reroll_count += 1;
+                    think_hard = true;
+                    continue;
+                }
             }
+            auto_reroll_count = 0;
         }
-        auto_reroll_count = 0;
 
         // display warnings
         if commit_description.to_lowercase().contains("claude") {
@@ -158,6 +163,7 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
             &mut commit_description,
             &mut multi_line,
             &mut prompt_extra,
+            &mut user_edited,
         )? {
             UserAction::Commit => break,
             UserAction::Exit => std::process::exit(1),
@@ -292,6 +298,7 @@ fn handle_user_action(
     commit_description: &mut String,
     multi_line: &mut bool,
     prompt_extra: &mut String,
+    user_edited: &mut bool,
 ) -> Result<UserAction> {
     match action {
         "y" => Ok(UserAction::Commit),
@@ -321,6 +328,7 @@ fn handle_user_action(
             if commit_description.trim().is_empty() {
                 std::process::exit(1);
             }
+            *user_edited = true;
             status!("updating...");
             Ok(UserAction::Continue)
         }
