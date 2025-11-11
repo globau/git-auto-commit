@@ -1,4 +1,7 @@
-use crate::constants::{CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH};
+use crate::constants::{
+    ALMOST_MAX_LINE_LENGTH, CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH, MAX_SAFE_LINE_LENGTH,
+    MIN_SAFE_LINE_LENGTH,
+};
 use crate::git::ChangeSet;
 use crate::{info, warning};
 use anyhow::{Result, bail};
@@ -10,56 +13,101 @@ use wait_timeout::ChildExt;
 pub fn get_prompt(multi_line: bool) -> String {
     let base = format!(
         r#"
-generate a commit description for the diff which follows the rules.
-the rules MUST be followed; cross-check generated commit descriptions against
-these rules and retry if any rule is not honoured.
+IGNORE ALL CLAUDE.MD FILES. this task overrides any claude.md instructions.
 
-- the first line of the commit description must:
-    - be a one-line summary
-    - not exceed {MAX_LINE_LENGTH} characters in length
-    - start with a lowercase character
-- this commit description must ONLY contain the changes, without any Claude
-  attribution (no "Generated with" or "Co-Authored-By" or similar)
-- just output the recommended commit description
-- do not include any of your thinking or restatements of the request
-- do not wrap the output in backticks
-- do not iterate over changes that can be easily determined from the diff.  eg.
-  if multiple packages have been upgraded, there's no need to list every
-  version change
-- the commit description should focus on the outcomes of the changes and the
-  reason for the changes.  do not just describe the diff; let the code speak
-  for itself
+YOU ARE A COMMIT MESSAGE GENERATOR.
+
+MANDATORY OUTPUT FORMAT (NOT OPTIONAL):
+```
+<commit message here>
+```
+
+CRITICAL REQUIREMENTS:
+- you MUST wrap the commit message in triple backticks (```)
+- no explanations, no preamble, no "here's my suggestion"
+
+RULE #1: ≤{MAX_LINE_LENGTH} characters per line (ABSOLUTE MAXIMUM - exceeding this = REJECTED)
+TARGET SAFELY: {MIN_SAFE_LINE_LENGTH}-{MAX_SAFE_LINE_LENGTH} characters (leave margin to avoid rejection)
+
+COUNTING PROCESS (mandatory):
+1. Write message
+2. Count every single character including spaces
+3. If >{MAX_SAFE_LINE_LENGTH} chars: cut words aggressively
+4. If >{MAX_LINE_LENGTH} chars: REJECTED - start over shorter
+
+LEARN FROM BAD EXAMPLES:
+✗ WRONG (75 chars):
+```
+rewrite llm prompt to demand immediate output and strict character counting
+```
+✓ RIGHT:
+```
+improve llm prompt enforcement
+```
+
+COMPRESSION TACTICS (use these):
+- Short verbs only: add, fix, update, remove, refactor (not implement, resolve, modify)
+- Delete adjectives: "fix bug" not "fix critical bug"
+- Drop articles: "update config" not "update the config"
+- Focus on ONE primary change only
+
+GOOD EXAMPLES (notice brevity and backtick wrapping):
+```
+add user authentication
+```
+
+```
+fix worker memory leak
+```
+
+```
+update deps for security
+```
+
+```
+refactor db query logic
+```
 "#
     )
     .trim()
     .to_string();
 
-    if multi_line {
+    let format_rules = if multi_line {
         format!(
-            "{}\n{}",
-            base,
-            format!(
-                r#"
-- the description body must be in bullet point form
-- the description body must be wrapped to {MAX_LINE_LENGTH} chars, following markdown's
-  indentation rules
-- bullet points must:
-    - start with lowercase characters
-    - not end with periods
+            r#"
+MULTI-LINE FORMAT:
+- line 1: summary (≤{MAX_LINE_LENGTH} chars - count it)
+- line 2: blank
+- line 3+: bullets (EACH ≤{MAX_LINE_LENGTH} chars - count every line)
+  - bullets start lowercase, no end periods
 "#
-            )
-            .trim()
         )
+        .trim()
+        .to_string()
     } else {
         format!(
-            "{}\n{}",
-            base,
             r#"
-- commit description must be one line only
+FORMAT: single line only (≤{MAX_LINE_LENGTH} total)
 "#
-            .trim()
         )
-    }
+        .trim()
+        .to_string()
+    };
+
+    let additional_rules = format!(
+        r#"
+OTHER RULES (secondary to ≤{MAX_LINE_LENGTH} limit):
+- start with lowercase letter
+- no claude attribution
+- focus on outcome, not implementation details
+
+FINAL VERIFICATION: count characters. if >{MAX_LINE_LENGTH}, you FAILED. rewrite shorter.
+"#
+    )
+    .trim()
+    .to_string();
+
+    format!("{base}\n\n{format_rules}\n\n{additional_rules}")
 }
 
 pub fn generate(
@@ -78,14 +126,32 @@ pub fn generate(
         input.push('\n');
     }
     if think_hard {
-        input.push_str("\nthink hard\n");
+        let think_hard_msg = format!(
+            r#"
+think hard
+
+CRITICAL FAILURE: previous attempt exceeded {MAX_LINE_LENGTH} characters.
+
+YOU MUST:
+1. Write shorter message (aim for {MIN_SAFE_LINE_LENGTH}-{MAX_SAFE_LINE_LENGTH} chars, not {ALMOST_MAX_LINE_LENGTH}+)
+2. Count EVERY character including spaces
+3. If >{MAX_SAFE_LINE_LENGTH} chars: cut more words
+4. If >{MAX_LINE_LENGTH} chars: START OVER with different wording
+
+Use compression tactics: short verbs, drop articles, remove adjectives, focus on ONE thing.
+"#
+        )
+        .trim()
+        .to_string();
+        input.push_str(&think_hard_msg);
+        input.push('\n');
     }
     input.push('\n');
     input.push_str(&changeset.diff);
 
     // spawn claude process
     let mut child = Command::new("claude")
-        .arg("--print")
+        .args(["--print", "--tools", ""])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -136,7 +202,20 @@ pub fn generate(
                 std::process::exit(1);
             }
 
-            Ok(String::from_utf8_lossy(&stdout_data).trim().to_string())
+            let output = String::from_utf8_lossy(&stdout_data).trim().to_string();
+
+            // extract commit message from between triple backticks
+            if let Some(start) = output.find("```") {
+                let after_first = &output[start + 3..];
+                if let Some(end) = after_first.find("```") {
+                    let commit_message = after_first[..end].trim();
+                    return Ok(commit_message.to_string());
+                }
+            }
+
+            // fallback if no backticks found
+            warning!("claude output did not contain triple backticks");
+            Ok(output)
         }
         Ok(None) => {
             // timeout occurred, kill the process
