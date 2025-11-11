@@ -76,7 +76,7 @@ pub fn sanity_check() -> Result<()> {
 /// checks staged changes first, falls back to unstaged (including untracked files)
 /// returns None if no changes found
 pub fn get_changes(path: &Path, context_lines: u32) -> Result<Option<ChangeSet>> {
-    let repo = Repository::open(path)
+    let repo = Repository::discover(path)
         .map_err(|e| anyhow::anyhow!("failed to open git repository: {}", e.clean()))?;
 
     // try staged changes first
