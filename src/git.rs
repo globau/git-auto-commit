@@ -294,7 +294,7 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
 
 /// stage all files in the changeset
 pub fn stage(path: &Path, changeset: &ChangeSet) -> Result<()> {
-    let repo = Repository::open(path)
+    let repo = Repository::discover(path)
         .map_err(|e| anyhow::anyhow!("failed to open git repository: {}", e.clean()))?;
     let mut index = repo
         .index()
