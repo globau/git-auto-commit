@@ -1,4 +1,5 @@
 mod claude;
+mod cli;
 mod constants;
 mod git;
 mod ui;
@@ -22,6 +23,9 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // parse cli arguments
+    let _cli = cli::Cli::parse_args();
+
     // sanity checks
     if !std::io::stdin().is_terminal()
         || !std::io::stdout().is_terminal()
