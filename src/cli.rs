@@ -9,7 +9,9 @@ use clap::Parser;
     disable_version_flag = true
 )]
 pub struct Cli {
-    // no arguments yet, but --help is provided by clap
+    /// print the prompt sent to claude
+    #[arg(long)]
+    pub debug_prompt: bool,
 }
 
 impl Cli {

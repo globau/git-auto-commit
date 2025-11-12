@@ -24,7 +24,7 @@ fn main() {
 
 fn run() -> Result<()> {
     // parse cli arguments
-    let _cli = cli::Cli::parse_args();
+    let cli = cli::Cli::parse_args();
 
     // sanity checks
     if !std::io::stdin().is_terminal()
@@ -73,11 +73,11 @@ fn run() -> Result<()> {
         }
     };
 
-    process_changes(&changeset)?;
+    process_changes(&changeset, cli.debug_prompt)?;
     Ok(())
 }
 
-fn process_changes(changeset: &ChangeSet) -> Result<()> {
+fn process_changes(changeset: &ChangeSet, show_prompt: bool) -> Result<()> {
     let file_count = changeset.files.len();
     let file_word = if file_count == 1 { "file" } else { "files" };
 
@@ -98,7 +98,14 @@ fn process_changes(changeset: &ChangeSet) -> Result<()> {
 
     loop {
         // regenerate commit desc, if required
-        if regenerate && let Some(desc) = generate(changeset, multi_line, think_hard, &prompt_extra)
+        if regenerate
+            && let Some(desc) = generate(
+                changeset,
+                multi_line,
+                think_hard,
+                &prompt_extra,
+                show_prompt,
+            )
         {
             if desc.trim().is_empty() {
                 warning!("generated description is empty, using fallback");
@@ -202,18 +209,26 @@ fn generate(
     multi_line: bool,
     think_hard: bool,
     prompt_extra: &str,
+    show_prompt: bool,
 ) -> Option<String> {
-    let spinner = ProgressBar::new_spinner();
-    spinner.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner}")
-            .expect("invalid spinner template"),
-    );
-    spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+    let spinner = if show_prompt {
+        None
+    } else {
+        let s = ProgressBar::new_spinner();
+        s.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner}")
+                .expect("invalid spinner template"),
+        );
+        s.enable_steady_tick(std::time::Duration::from_millis(100));
+        Some(s)
+    };
 
-    let result = claude::generate(changeset, multi_line, think_hard, prompt_extra);
+    let result = claude::generate(changeset, multi_line, think_hard, prompt_extra, show_prompt);
 
-    spinner.finish_and_clear();
+    if let Some(s) = spinner {
+        s.finish_and_clear();
+    }
 
     match result {
         Ok(description) => Some(description),

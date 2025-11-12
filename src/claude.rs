@@ -115,6 +115,7 @@ pub fn generate(
     multi_line: bool,
     think_hard: bool,
     prompt_extra: &str,
+    show_prompt: bool,
 ) -> Result<String> {
     let prompt = get_prompt(multi_line);
 
@@ -146,6 +147,13 @@ Use compression tactics: short verbs, drop articles, remove adjectives, focus on
         input.push_str(&think_hard_msg);
         input.push('\n');
     }
+    // print prompt if requested (before adding diff)
+    if show_prompt {
+        use colored::Colorize;
+        use std::io::Write;
+        let _ = writeln!(std::io::stdout(), "\n{}", input.dimmed());
+    }
+
     input.push('\n');
     input.push_str(&changeset.diff);
 
