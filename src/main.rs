@@ -1,6 +1,7 @@
 mod claude;
 mod cli;
 mod constants;
+mod context;
 mod git;
 mod ui;
 
@@ -35,11 +36,12 @@ fn run() -> Result<()> {
     }
     git::sanity_check()?;
 
-    // main - try with default context first, reduce if necessary
-    let mut context_lines = DEFAULT_CONTEXT;
+    // create application context
+    let mut ctx = context::AppContext::new(cli.debug_prompt);
 
+    // main - try with default context first, reduce if necessary
     let changeset = loop {
-        match git::get_changes(Path::new("."), context_lines)? {
+        match git::get_changes(Path::new("."), ctx.context_lines)? {
             Some(cs) => {
                 let diff_size = cs.diff.len();
 
@@ -47,9 +49,9 @@ fn run() -> Result<()> {
                     // diff is acceptable size, use it
                     break cs;
                 }
-                if diff_size > DIFF_SIZE_WARNING_BYTES && context_lines == DEFAULT_CONTEXT {
+                if diff_size > DIFF_SIZE_WARNING_BYTES && ctx.context_lines == DEFAULT_CONTEXT {
                     // diff is too large, try with less context
-                    context_lines = LESS_CONTEXT;
+                    ctx.context_lines = LESS_CONTEXT;
                     continue;
                 }
 
@@ -73,11 +75,11 @@ fn run() -> Result<()> {
         }
     };
 
-    process_changes(&changeset, cli.debug_prompt)?;
+    process_changes(&mut ctx, &changeset)?;
     Ok(())
 }
 
-fn process_changes(changeset: &ChangeSet, show_prompt: bool) -> Result<()> {
+fn process_changes(ctx: &mut context::AppContext, changeset: &ChangeSet) -> Result<()> {
     let file_count = changeset.files.len();
     let file_word = if file_count == 1 { "file" } else { "files" };
 
@@ -88,74 +90,61 @@ fn process_changes(changeset: &ChangeSet, show_prompt: bool) -> Result<()> {
         file_word
     );
 
-    let mut multi_line = false;
-    let mut think_hard = false;
-    let mut regenerate = true;
-    let mut prompt_extra = String::new();
-    let mut commit_description = String::from("bug fixes and/or improvements");
-    let mut auto_reroll_count = 0;
-    let mut user_edited = false;
-
     loop {
         // regenerate commit desc, if required
-        if regenerate
-            && let Some(desc) = generate(
-                changeset,
-                multi_line,
-                think_hard,
-                &prompt_extra,
-                show_prompt,
-            )
+        if ctx.regenerate
+            && let Some(desc) = generate(ctx, changeset)
         {
             if desc.trim().is_empty() {
                 warning!("generated description is empty, using fallback");
             } else {
-                commit_description = desc;
-                user_edited = false;
+                ctx.commit_description = desc;
+                ctx.user_edited = false;
             }
         }
-        regenerate = true;
-        think_hard = false;
+        ctx.regenerate = true;
+        ctx.think_hard = false;
 
         // display commit info
-        display_commit_info(&commit_description, &changeset.files);
+        display_commit_info(&ctx.commit_description, &changeset.files);
 
         // auto-reroll long lines (claude frequently ignores the 72 char limit)
         // but only if the description was not user-edited
-        if !user_edited {
-            let any_line_too_long = commit_description
+        if !ctx.user_edited {
+            let any_line_too_long = ctx
+                .commit_description
                 .lines()
                 .any(|line| line.len() > MAX_LINE_LENGTH);
             if any_line_too_long {
                 let message = format!(
                     "commit message {} longer than {} chars",
-                    if commit_description.lines().count() > 1 {
+                    if ctx.commit_description.lines().count() > 1 {
                         "has lines"
                     } else {
                         "is"
                     },
                     MAX_LINE_LENGTH
                 );
-                if auto_reroll_count >= MAX_AUTO_REROLLS {
+                if ctx.auto_reroll_count >= MAX_AUTO_REROLLS {
                     error!(
                         "{} (not auto-rerolling after {} attempts)",
                         message, MAX_AUTO_REROLLS
                     );
                 } else {
                     error!("{}, rerolling...", message);
-                    auto_reroll_count += 1;
-                    think_hard = true;
+                    ctx.auto_reroll_count += 1;
+                    ctx.think_hard = true;
                     continue;
                 }
             }
-            auto_reroll_count = 0;
+            ctx.auto_reroll_count = 0;
         }
 
         // display warnings
-        if commit_description.to_lowercase().contains("claude") {
+        if ctx.commit_description.to_lowercase().contains("claude") {
             warning!("warning: commit desc contains a reference to Claude");
         }
-        if !multi_line && commit_description.contains('\n') {
+        if !ctx.multi_line && ctx.commit_description.contains('\n') {
             warning!("warning: commit message contains multiple lines");
         }
 
@@ -164,25 +153,19 @@ fn process_changes(changeset: &ChangeSet, show_prompt: bool) -> Result<()> {
             "YES",
             "no",
             "reroll",
-            if multi_line { "short" } else { "long" },
+            if ctx.multi_line { "short" } else { "long" },
             "edit",
             "prompt",
         ];
         let action = ui::prompt(&options)?;
-        match handle_user_action(
-            &action,
-            &mut commit_description,
-            &mut multi_line,
-            &mut prompt_extra,
-            &mut user_edited,
-        )? {
+        match handle_user_action(&action, ctx)? {
             UserAction::Commit => break,
             UserAction::Exit => std::process::exit(1),
             UserAction::Reroll => {
-                think_hard = true;
+                ctx.think_hard = true;
             }
             UserAction::Continue => {
-                regenerate = false;
+                ctx.regenerate = false;
             }
         }
     }
@@ -191,7 +174,7 @@ fn process_changes(changeset: &ChangeSet, show_prompt: bool) -> Result<()> {
     if !changeset.is_staged {
         git::stage(Path::new("."), changeset)?;
     }
-    git::commit(Path::new("."), &commit_description)?;
+    git::commit(Path::new("."), &ctx.commit_description)?;
 
     Ok(())
 }
@@ -204,14 +187,8 @@ enum UserAction {
 }
 
 /// generate commit description with spinner
-fn generate(
-    changeset: &ChangeSet,
-    multi_line: bool,
-    think_hard: bool,
-    prompt_extra: &str,
-    show_prompt: bool,
-) -> Option<String> {
-    let spinner = if show_prompt {
+fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> {
+    let spinner = if ctx.show_prompt {
         None
     } else {
         let s = ProgressBar::new_spinner();
@@ -224,7 +201,7 @@ fn generate(
         Some(s)
     };
 
-    let result = claude::generate(changeset, multi_line, think_hard, prompt_extra, show_prompt);
+    let result = claude::generate(ctx, changeset);
 
     if let Some(s) = spinner {
         s.finish_and_clear();
@@ -312,13 +289,7 @@ fn display_commit_info(commit_description: &str, files: &[FileChange]) {
 }
 
 /// handle user action and return what to do next
-fn handle_user_action(
-    action: &str,
-    commit_description: &mut String,
-    multi_line: &mut bool,
-    prompt_extra: &mut String,
-    user_edited: &mut bool,
-) -> Result<UserAction> {
+fn handle_user_action(action: &str, ctx: &mut context::AppContext) -> Result<UserAction> {
     match action {
         "y" => Ok(UserAction::Commit),
         "n" => Ok(UserAction::Exit),
@@ -327,39 +298,44 @@ fn handle_user_action(
             Ok(UserAction::Reroll)
         }
         "s" => {
-            *multi_line = false;
-            *commit_description = commit_description.lines().next().unwrap_or("").to_string();
+            ctx.multi_line = false;
+            ctx.commit_description = ctx
+                .commit_description
+                .lines()
+                .next()
+                .unwrap_or("")
+                .to_string();
             status!("updating...");
             Ok(UserAction::Continue)
         }
         "l" => {
-            *multi_line = true;
+            ctx.multi_line = true;
             status!("thinking...");
             Ok(UserAction::Reroll)
         }
         "e" => {
-            *commit_description = if *multi_line {
-                ui::edit_multi_line(commit_description)?
+            ctx.commit_description = if ctx.multi_line {
+                ui::edit_multi_line(&ctx.commit_description)?
             } else {
                 info!("");
-                ui::edit_one_line(commit_description)?
+                ui::edit_one_line(&ctx.commit_description)?
             };
-            if commit_description.trim().is_empty() {
+            if ctx.commit_description.trim().is_empty() {
                 std::process::exit(1);
             }
-            *user_edited = true;
+            ctx.user_edited = true;
             status!("updating...");
             Ok(UserAction::Continue)
         }
         "p" => {
             status!("provide extra claude prompt context:");
-            for line in claude::get_prompt(*multi_line).lines() {
+            for line in claude::get_prompt(ctx).lines() {
                 info!("> {}", line);
             }
-            let old_prompt_extra = prompt_extra.clone();
-            *prompt_extra = ui::edit_one_line(prompt_extra.as_str())?;
+            let old_prompt_extra = ctx.prompt_extra.clone();
+            ctx.prompt_extra = ui::edit_one_line(&ctx.prompt_extra)?;
             status!("thinking...");
-            if *prompt_extra == old_prompt_extra {
+            if ctx.prompt_extra == old_prompt_extra {
                 Ok(UserAction::Continue)
             } else {
                 Ok(UserAction::Reroll)

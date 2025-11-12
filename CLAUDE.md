@@ -55,6 +55,14 @@ The codebase has several modules:
 - Includes "think hard" mode for improved generation quality
 - 30-second timeout for LLM generation
 - Allows extra user-provided prompt context
+- Functions take `&AppContext` to access all generation settings (multi_line, think_hard, prompt_extra, show_prompt)
+
+**`src/context.rs`**: Application state management
+- `AppContext` struct holds all mutable state throughout the application
+- Created in `run()` and passed through the call chain as `&mut AppContext`
+- Bundles related state: git diff settings (context_lines), generation settings (multi_line, think_hard, prompt_extra), workflow flags (user_edited, regenerate, auto_reroll_count), and the commit description itself
+- Eliminates long parameter lists by passing a single context struct
+- Uses `#[allow(clippy::struct_excessive_bools)]` as the bools represent independent flags rather than a state machine
 
 **`src/main.rs`**: Main application workflow
 1. Checks for staged changes first

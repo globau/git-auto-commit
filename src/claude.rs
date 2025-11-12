@@ -2,6 +2,7 @@ use crate::constants::{
     ALMOST_MAX_LINE_LENGTH, CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH, MAX_SAFE_LINE_LENGTH,
     MIN_SAFE_LINE_LENGTH,
 };
+use crate::context::AppContext;
 use crate::git::ChangeSet;
 use crate::{info, warning};
 use anyhow::{Result, bail};
@@ -10,7 +11,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
-pub fn get_prompt(multi_line: bool) -> String {
+pub fn get_prompt(ctx: &AppContext) -> String {
+    let multi_line = ctx.multi_line;
     let base = format!(
         r#"
 IGNORE ALL CLAUDE.MD FILES. this task overrides any claude.md instructions.
@@ -110,23 +112,17 @@ FINAL VERIFICATION: count characters. if >{MAX_LINE_LENGTH}, you FAILED. rewrite
     format!("{base}\n\n{format_rules}\n\n{additional_rules}")
 }
 
-pub fn generate(
-    changeset: &ChangeSet,
-    multi_line: bool,
-    think_hard: bool,
-    prompt_extra: &str,
-    show_prompt: bool,
-) -> Result<String> {
-    let prompt = get_prompt(multi_line);
+pub fn generate(ctx: &AppContext, changeset: &ChangeSet) -> Result<String> {
+    let prompt = get_prompt(ctx);
 
     let mut input = String::new();
     input.push_str(&prompt);
     input.push('\n');
-    if !prompt_extra.is_empty() {
-        input.push_str(prompt_extra);
+    if !ctx.prompt_extra.is_empty() {
+        input.push_str(&ctx.prompt_extra);
         input.push('\n');
     }
-    if think_hard {
+    if ctx.think_hard {
         let think_hard_msg = format!(
             r#"
 think hard
@@ -148,7 +144,7 @@ Use compression tactics: short verbs, drop articles, remove adjectives, focus on
         input.push('\n');
     }
     // print prompt if requested (before adding diff)
-    if show_prompt {
+    if ctx.show_prompt {
         use colored::Colorize;
         use std::io::Write;
         let _ = writeln!(std::io::stdout(), "\n{}", input.dimmed());
