@@ -329,9 +329,6 @@ fn handle_user_action(action: &str, ctx: &mut context::AppContext) -> Result<Use
         }
         "p" => {
             status!("provide extra claude prompt context:");
-            for line in claude::get_prompt(ctx).lines() {
-                info!("> {}", line);
-            }
             let old_prompt_extra = ctx.prompt_extra.clone();
             ctx.prompt_extra = ui::edit_one_line(&ctx.prompt_extra)?;
             status!("thinking...");
