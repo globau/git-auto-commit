@@ -127,11 +127,9 @@ pub fn generate(ctx: &AppContext, changeset: &ChangeSet) -> Result<String> {
         input.push_str(&ctx.prompt_extra);
         input.push('\n');
     }
-    if ctx.think_hard {
-        let think_hard_msg = format!(
+    if ctx.auto_reroll_count > 0 {
+        let critical_failure_msg = format!(
             r#"
-think hard
-
 CRITICAL FAILURE: previous attempt exceeded {MAX_LINE_LENGTH} characters.
 
 YOU MUST:
@@ -145,9 +143,14 @@ Stay descriptive but use compression tactics to fit the limit.
         )
         .trim()
         .to_string();
-        input.push_str(&think_hard_msg);
+        input.push_str(&critical_failure_msg);
         input.push('\n');
     }
+    if ctx.think_hard {
+        input.push_str("think hard");
+        input.push('\n');
+    }
+    
     // print prompt if requested (before adding diff)
     if ctx.show_prompt {
         use colored::Colorize;
