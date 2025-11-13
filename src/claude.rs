@@ -1,6 +1,5 @@
 use crate::constants::{
-    ALMOST_MAX_LINE_LENGTH, CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH, MAX_SAFE_LINE_LENGTH,
-    MIN_SAFE_LINE_LENGTH,
+    CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH, MAX_SAFE_LINE_LENGTH, MIN_SAFE_LINE_LENGTH,
 };
 use crate::context::AppContext;
 use crate::git::ChangeSet;
@@ -29,45 +28,51 @@ CRITICAL REQUIREMENTS:
 - no explanations, no preamble, no "here's my suggestion"
 
 RULE #1: ≤{MAX_LINE_LENGTH} characters per line (ABSOLUTE MAXIMUM - exceeding this = REJECTED)
-TARGET SAFELY: {MIN_SAFE_LINE_LENGTH}-{MAX_SAFE_LINE_LENGTH} characters (leave margin to avoid rejection)
+TARGET: be descriptive but stay comfortably under {MAX_LINE_LENGTH} (aim for {MIN_SAFE_LINE_LENGTH}-{MAX_SAFE_LINE_LENGTH} chars)
 
 COUNTING PROCESS (mandatory):
-1. Write message
+1. Write a descriptive message explaining what changed and why
 2. Count every single character including spaces
-3. If >{MAX_SAFE_LINE_LENGTH} chars: cut words aggressively
-4. If >{MAX_LINE_LENGTH} chars: REJECTED - start over shorter
+3. If >{MAX_LINE_LENGTH} chars: use compression tactics below
+4. If still >{MAX_LINE_LENGTH}: REJECTED - rewrite shorter
 
 LEARN FROM BAD EXAMPLES:
 ✗ WRONG (75 chars):
 ```
 rewrite llm prompt to demand immediate output and strict character counting
 ```
-✓ RIGHT:
+✓ RIGHT (63 chars):
 ```
-improve llm prompt enforcement
-```
-
-COMPRESSION TACTICS (use these):
-- Short verbs only: add, fix, update, remove, refactor (not implement, resolve, modify)
-- Delete adjectives: "fix bug" not "fix critical bug"
-- Drop articles: "update config" not "update the config"
-- Focus on ONE primary change only
-
-GOOD EXAMPLES (notice brevity and backtick wrapping):
-```
-add user authentication
+rewrite llm prompt for stricter output format and char counting
 ```
 
-```
-fix worker memory leak
-```
+WRITING EFFECTIVE MESSAGES:
+- be descriptive: explain what and why within the character limit
+- use clear verbs: add, fix, update, remove, refactor, improve, etc
+- include relevant context if space allows
+- focus on the primary change
 
+COMPRESSION TACTICS (use when needed to fit {MAX_LINE_LENGTH}):
+- prefer short verbs: add, fix, update, remove, refactor
+- drop articles where clear: "update config" not "update the config"
+- remove unnecessary adjectives: "fix bug" not "fix critical bug"
+- focus on primary change if describing multiple things
+
+GOOD EXAMPLES (notice descriptive yet concise):
 ```
-update deps for security
+add jwt authentication for user login endpoints
 ```
 
 ```
-refactor db query logic
+fix memory leak in background worker thread pool
+```
+
+```
+update dependencies to resolve security vulnerabilities
+```
+
+```
+refactor database query builder for better performance
 ```
 "#
     )
@@ -130,12 +135,12 @@ think hard
 CRITICAL FAILURE: previous attempt exceeded {MAX_LINE_LENGTH} characters.
 
 YOU MUST:
-1. Write shorter message (aim for {MIN_SAFE_LINE_LENGTH}-{MAX_SAFE_LINE_LENGTH} chars, not {ALMOST_MAX_LINE_LENGTH}+)
+1. Write a descriptive message that fits within {MAX_LINE_LENGTH} characters
 2. Count EVERY character including spaces
-3. If >{MAX_SAFE_LINE_LENGTH} chars: cut more words
-4. If >{MAX_LINE_LENGTH} chars: START OVER with different wording
+3. If >{MAX_LINE_LENGTH} chars: apply compression tactics (short verbs, drop articles, remove adjectives)
+4. If still >{MAX_LINE_LENGTH}: START OVER with different wording
 
-Use compression tactics: short verbs, drop articles, remove adjectives, focus on ONE thing.
+Stay descriptive but use compression tactics to fit the limit.
 "#
         )
         .trim()

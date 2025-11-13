@@ -1,8 +1,7 @@
 // commit message
 pub const MAX_LINE_LENGTH: usize = 72;
-pub const ALMOST_MAX_LINE_LENGTH: usize = MAX_LINE_LENGTH - 2;
 pub const MIN_SAFE_LINE_LENGTH: usize = 60;
-pub const MAX_SAFE_LINE_LENGTH: usize = 65;
+pub const MAX_SAFE_LINE_LENGTH: usize = 70;
 
 // ui
 pub const MAX_FILES_TO_SHOW: usize = 10;
