@@ -1,5 +1,6 @@
 use crate::constants::{
     CLAUDE_TIMEOUT_SECS, MAX_LINE_LENGTH, MAX_SAFE_LINE_LENGTH, MIN_SAFE_LINE_LENGTH,
+    ULTRATHINK_THRESHOLD,
 };
 use crate::context::AppContext;
 use crate::git::ChangeSet;
@@ -114,7 +115,7 @@ FINAL VERIFICATION: count characters. if >{MAX_LINE_LENGTH}, you FAILED. rewrite
     .trim()
     .to_string();
 
-    format!("{base}\n\n{format_rules}\n\n{additional_rules}")
+    format!("{base}\n\n{format_rules}\n\n{additional_rules}\n\n")
 }
 
 pub fn generate(ctx: &AppContext, changeset: &ChangeSet) -> Result<String> {
@@ -147,10 +148,15 @@ Stay descriptive but use compression tactics to fit the limit.
         input.push('\n');
     }
     if ctx.think_hard {
-        input.push_str("think hard");
+        let think_mode = if ctx.manual_reroll_count > ULTRATHINK_THRESHOLD {
+            "ultrathink"
+        } else {
+            "think hard"
+        };
+        input.push_str(think_mode);
         input.push('\n');
     }
-    
+
     // print prompt if requested (before adding diff)
     if ctx.show_prompt {
         use colored::Colorize;

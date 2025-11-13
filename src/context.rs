@@ -22,6 +22,9 @@ pub struct AppContext {
     /// count of automatic rerolls (for line length violations)
     pub auto_reroll_count: usize,
 
+    /// count of consecutive manual rerolls requested by user
+    pub manual_reroll_count: usize,
+
     /// whether the user has manually edited the commit description
     pub user_edited: bool,
 
@@ -43,6 +46,7 @@ impl AppContext {
             // state
             regenerate: true,
             auto_reroll_count: 0,
+            manual_reroll_count: 0,
             user_edited: false,
             // debugging
             show_prompt,

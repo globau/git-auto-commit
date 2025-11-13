@@ -6,6 +6,7 @@ pub const MAX_SAFE_LINE_LENGTH: usize = 70;
 // ui
 pub const MAX_FILES_TO_SHOW: usize = 10;
 pub const MAX_AUTO_REROLLS: usize = 3;
+pub const ULTRATHINK_THRESHOLD: usize = 2;
 
 // diff
 pub const DEFAULT_CONTEXT: u32 = 3;

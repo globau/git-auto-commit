@@ -163,9 +163,11 @@ fn process_changes(ctx: &mut context::AppContext, changeset: &ChangeSet) -> Resu
             UserAction::Exit => std::process::exit(1),
             UserAction::Reroll => {
                 ctx.think_hard = true;
+                ctx.manual_reroll_count += 1;
             }
             UserAction::Continue => {
                 ctx.regenerate = false;
+                ctx.manual_reroll_count = 0;
             }
         }
     }
