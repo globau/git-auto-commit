@@ -15,7 +15,3 @@ test:
 	cargo fmt -- --check
 	cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic
 	cargo test
-
-install: /usr/local/bin/git-auto-commit
-/usr/local/bin/git-auto-commit: target/release/git-auto-commit
-	cp -v target/release/git-auto-commit /usr/local/bin/
