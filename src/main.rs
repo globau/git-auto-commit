@@ -7,7 +7,7 @@ mod ui;
 
 use crate::constants::{
     DEFAULT_CONTEXT, DIFF_SIZE_MAXIMUM_BYTES, DIFF_SIZE_WARNING_BYTES, LESS_CONTEXT,
-    MAX_AUTO_REROLLS, MAX_FILES_TO_SHOW, MAX_LINE_LENGTH,
+    MAX_AUTO_REROLLS, MAX_FILES_TO_SHOW, MAX_LINE_LENGTH, MODEL_FAST, MODEL_SMART,
 };
 use crate::git::{ChangeSet, FileChange, status_char};
 use anyhow::{Result, bail};
@@ -91,6 +91,11 @@ fn process_changes(ctx: &mut context::AppContext, changeset: &ChangeSet) -> Resu
     );
 
     loop {
+        // switch to a smarter model when rerolling
+        if ctx.manual_reroll_count > 0 || ctx.auto_reroll_count > 0 {
+            ctx.model = MODEL_SMART.to_string();
+        }
+
         // regenerate commit desc, if required
         if ctx.regenerate
             && let Some(desc) = generate(ctx, changeset)
@@ -102,6 +107,7 @@ fn process_changes(ctx: &mut context::AppContext, changeset: &ChangeSet) -> Resu
                 ctx.user_edited = false;
             }
         }
+        ctx.model = MODEL_FAST.to_string();
         ctx.regenerate = true;
         ctx.think_hard = false;
 

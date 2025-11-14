@@ -10,6 +10,9 @@ pub struct AppContext {
     /// number of context lines for git unified diff
     pub context_lines: u32,
 
+    /// which model claude should use
+    pub model: String,
+
     /// whether to enable "think hard" mode for generation
     pub think_hard: bool,
 
@@ -41,6 +44,7 @@ impl AppContext {
             multi_line: false,
             // prompt
             context_lines: crate::constants::DEFAULT_CONTEXT,
+            model: crate::constants::MODEL_FAST.to_string(),
             think_hard: false,
             prompt_extra: String::new(),
             // state

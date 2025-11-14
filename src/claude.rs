@@ -169,7 +169,7 @@ Stay descriptive but use compression tactics to fit the limit.
 
     // spawn claude process
     let mut child = Command::new("claude")
-        .args(["--print", "--tools", ""])
+        .args(["--print", "--tools", "", "--model", &ctx.model])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
