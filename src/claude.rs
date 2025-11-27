@@ -37,16 +37,6 @@ COUNTING PROCESS (mandatory):
 3. If >{MAX_LINE_LENGTH} chars: use compression tactics below
 4. If still >{MAX_LINE_LENGTH}: REJECTED - rewrite shorter
 
-LEARN FROM BAD EXAMPLES:
-✗ WRONG (75 chars):
-```
-rewrite llm prompt to demand immediate output and strict character counting
-```
-✓ RIGHT (63 chars):
-```
-rewrite llm prompt for stricter output format and char counting
-```
-
 WRITING EFFECTIVE MESSAGES:
 - be descriptive: explain what and why within the character limit
 - use clear verbs: add, fix, update, remove, refactor, improve, etc
@@ -58,8 +48,66 @@ COMPRESSION TACTICS (use when needed to fit {MAX_LINE_LENGTH}):
 - drop articles where clear: "update config" not "update the config"
 - remove unnecessary adjectives: "fix bug" not "fix critical bug"
 - focus on primary change if describing multiple things
+"#
+    )
+    .trim()
+    .to_string();
 
-GOOD EXAMPLES (notice descriptive yet concise):
+    let format_rules = if multi_line {
+        format!(
+            r#"
+MULTI-LINE FORMAT (MANDATORY - you MUST use this format):
+- line 1: summary (≤{MAX_LINE_LENGTH} chars - count it)
+- line 2: blank (required)
+- line 3+: bullets with details (EACH ≤{MAX_LINE_LENGTH} chars - count every line)
+  - bullets start lowercase, no end periods
+  - provide 2-4 bullet points with specific details
+
+CRITICAL: single-line output is NOT acceptable. you MUST use the multi-line format above.
+
+GOOD MULTI-LINE EXAMPLES:
+```
+add user authentication system
+
+- implement jwt token generation and validation
+- add login and registration endpoints
+- include password hashing with bcrypt
+```
+
+```
+refactor database connection handling
+
+- extract connection pool to separate module
+- add retry logic for transient failures
+- improve error messages for debugging
+```
+
+```
+fix memory leak in background workers
+
+- properly close database connections after use
+- clear event listeners when workers shut down
+```
+"#
+        )
+        .trim()
+        .to_string()
+    } else {
+        format!(
+            r#"
+FORMAT: single line only (≤{MAX_LINE_LENGTH} total)
+
+LEARN FROM BAD EXAMPLES:
+✗ WRONG (75 chars):
+```
+rewrite llm prompt to demand immediate output and strict character counting
+```
+✓ RIGHT (63 chars):
+```
+rewrite llm prompt for stricter output format and char counting
+```
+
+GOOD SINGLE-LINE EXAMPLES (notice descriptive yet concise):
 ```
 add jwt authentication for user login endpoints
 ```
@@ -75,27 +123,6 @@ update dependencies to resolve security vulnerabilities
 ```
 refactor database query builder for better performance
 ```
-"#
-    )
-    .trim()
-    .to_string();
-
-    let format_rules = if multi_line {
-        format!(
-            r#"
-MULTI-LINE FORMAT:
-- line 1: summary (≤{MAX_LINE_LENGTH} chars - count it)
-- line 2: blank
-- line 3+: bullets (EACH ≤{MAX_LINE_LENGTH} chars - count every line)
-  - bullets start lowercase, no end periods
-"#
-        )
-        .trim()
-        .to_string()
-    } else {
-        format!(
-            r#"
-FORMAT: single line only (≤{MAX_LINE_LENGTH} total)
 "#
         )
         .trim()
