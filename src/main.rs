@@ -80,16 +80,6 @@ fn run() -> Result<()> {
 }
 
 fn process_changes(ctx: &mut context::AppContext, changeset: &ChangeSet) -> Result<()> {
-    let file_count = changeset.files.len();
-    let file_word = if file_count == 1 { "file" } else { "files" };
-
-    status!(
-        "generating commit description from {} touching {} {}...",
-        changeset.source(),
-        file_count,
-        file_word
-    );
-
     loop {
         // switch to a smarter model when rerolling
         if ctx.manual_reroll_count > 0 || ctx.auto_reroll_count > 0 {
@@ -196,15 +186,24 @@ enum UserAction {
 
 /// generate commit description with spinner
 fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> {
+    let file_count = changeset.files.len();
+    let summary = format!(
+        "commit description from {} touching {} {}",
+        changeset.source(),
+        file_count,
+        if file_count == 1 { "file" } else { "files" }
+    );
+
     let spinner = if ctx.show_prompt {
         None
     } else {
         let s = ProgressBar::new_spinner();
         s.set_style(
             ProgressStyle::default_spinner()
-                .template("{spinner}")
-                .expect("invalid spinner template"),
+                .template("{spinner:.cyan} {msg:.cyan}")
+                .unwrap(),
         );
+        s.set_message(format!("generating {summary}"));
         s.enable_steady_tick(std::time::Duration::from_millis(100));
         Some(s)
     };
@@ -214,6 +213,8 @@ fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> 
     if let Some(s) = spinner {
         s.finish_and_clear();
     }
+
+    status!("generated {}", summary);
 
     match result {
         Ok(description) => Some(description),
@@ -301,10 +302,7 @@ fn handle_user_action(action: &str, ctx: &mut context::AppContext) -> Result<Use
     match action {
         "y" => Ok(UserAction::Commit),
         "n" => Ok(UserAction::Exit),
-        "r" => {
-            status!("rerolling...");
-            Ok(UserAction::Reroll)
-        }
+        "r" => Ok(UserAction::Reroll),
         "s" => {
             ctx.multi_line = false;
             ctx.commit_description = ctx
@@ -313,12 +311,10 @@ fn handle_user_action(action: &str, ctx: &mut context::AppContext) -> Result<Use
                 .next()
                 .unwrap_or("")
                 .to_string();
-            status!("updating...");
             Ok(UserAction::Continue)
         }
         "l" => {
             ctx.multi_line = true;
-            status!("thinking...");
             Ok(UserAction::Reroll)
         }
         "e" => {
@@ -332,14 +328,12 @@ fn handle_user_action(action: &str, ctx: &mut context::AppContext) -> Result<Use
                 std::process::exit(1);
             }
             ctx.user_edited = true;
-            status!("updating...");
             Ok(UserAction::Continue)
         }
         "p" => {
             status!("provide extra claude prompt context:");
             let old_prompt_extra = ctx.prompt_extra.clone();
             ctx.prompt_extra = ui::edit_one_line(&ctx.prompt_extra)?;
-            status!("thinking...");
             if ctx.prompt_extra == old_prompt_extra {
                 Ok(UserAction::Continue)
             } else {
