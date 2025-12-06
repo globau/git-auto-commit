@@ -11,6 +11,28 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use wait_timeout::ChildExt;
 
+pub struct GenerateResponse {
+    pub message: String,
+    pub tokens: u64,
+    pub cost: f64,
+}
+
+/// extract commit message from between triple backticks
+fn extract_from_backticks(output: String) -> String {
+    output
+        .find("```")
+        .and_then(|start| {
+            let after_first = &output[start + 3..];
+            after_first
+                .find("```")
+                .map(|end| after_first[..end].trim().to_string())
+        })
+        .unwrap_or_else(|| {
+            warning!("claude output did not contain triple backticks");
+            output
+        })
+}
+
 pub fn get_prompt(ctx: &AppContext) -> String {
     let multi_line = ctx.multi_line;
     let base = format!(
@@ -145,7 +167,7 @@ FINAL VERIFICATION: count characters. if >{MAX_LINE_LENGTH}, you FAILED. rewrite
     format!("{base}\n\n{format_rules}\n\n{additional_rules}\n\n")
 }
 
-pub fn generate(ctx: &AppContext, changeset: &ChangeSet) -> Result<String> {
+pub fn generate(ctx: &AppContext, changeset: &ChangeSet) -> Result<GenerateResponse> {
     let prompt = get_prompt(ctx);
 
     let mut input = String::new();
@@ -196,7 +218,15 @@ Stay descriptive but use compression tactics to fit the limit.
 
     // spawn claude process
     let mut child = Command::new("claude")
-        .args(["--print", "--tools", "", "--model", &ctx.model])
+        .args([
+            "--print",
+            "--output-format",
+            "json",
+            "--tools",
+            "",
+            "--model",
+            &ctx.model,
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -247,20 +277,43 @@ Stay descriptive but use compression tactics to fit the limit.
                 std::process::exit(1);
             }
 
-            let output = String::from_utf8_lossy(&stdout_data).trim().to_string();
+            let res = String::from_utf8_lossy(&stdout_data).trim().to_string();
 
-            // extract commit message from between triple backticks
-            if let Some(start) = output.find("```") {
-                let after_first = &output[start + 3..];
-                if let Some(end) = after_first.find("```") {
-                    let commit_message = after_first[..end].trim();
-                    return Ok(commit_message.to_string());
-                }
-            }
+            // parse json and extract result field, tokens, and cost
+            let json: serde_json::Value = serde_json::from_str(&res)
+                .map_err(|e| anyhow::anyhow!("failed to parse claude json response: {e}"))?;
 
-            // fallback if no backticks found
-            warning!("claude output did not contain triple backticks");
-            Ok(output)
+            let output = json
+                .get("result")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("claude json response missing 'result' field"))?
+                .to_string();
+
+            // sum all fields ending in '_tokens' from usage object
+            let total_tokens: u64 =
+                json.get("usage")
+                    .and_then(|v| v.as_object())
+                    .map_or(0, |usage| {
+                        usage
+                            .iter()
+                            .filter(|(k, _)| k.ends_with("_tokens"))
+                            .filter_map(|(_, v)| v.as_u64())
+                            .sum()
+                    });
+
+            // extract total cost
+            let total_cost = json
+                .get("total_cost_usd")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0);
+
+            let commit_message = extract_from_backticks(output);
+
+            Ok(GenerateResponse {
+                message: commit_message,
+                tokens: total_tokens,
+                cost: total_cost,
+            })
         }
         Ok(None) => {
             // timeout occurred, kill the process

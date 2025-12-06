@@ -188,7 +188,7 @@ enum UserAction {
 fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> {
     let file_count = changeset.files.len();
     let summary = format!(
-        "commit description from {} touching {} {}",
+        "{} [{} {}]",
         changeset.source(),
         file_count,
         if file_count == 1 { "file" } else { "files" }
@@ -203,26 +203,33 @@ fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> 
                 .template("{spinner:.cyan} {msg:.cyan}")
                 .unwrap(),
         );
-        s.set_message(format!("generating {summary}"));
+        s.set_message(format!("generating commit description from {summary}"));
         s.enable_steady_tick(std::time::Duration::from_millis(100));
         Some(s)
     };
 
-    let result = claude::generate(ctx, changeset);
+    let generated = claude::generate(ctx, changeset);
 
     if let Some(s) = spinner {
         s.finish_and_clear();
     }
 
-    status!("generated {}", summary);
-
-    match result {
-        Ok(description) => Some(description),
+    let generated = match generated {
+        Ok(res) => res,
         Err(e) => {
             error!("{}", e);
-            None
+            return None;
         }
-    }
+    };
+
+    status!(
+        "{} ({} tokens, ${:.4} USD)",
+        summary,
+        generated.tokens.to_formatted_string(&Locale::en),
+        generated.cost
+    );
+
+    Some(generated.message)
 }
 
 /// display commit description and files
