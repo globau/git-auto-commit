@@ -14,6 +14,9 @@ A Rust CLI tool that analyses git changes and generates commit messages using Cl
 
 - **Smart change detection**: Prioritises staged changes, falls back to unstaged changes (including untracked files) if nothing is staged
 - **AI-powered commit messages**: Uses the `claude` CLI tool to generate contextual commit descriptions
+- **Adaptive model selection**: Starts with fast model (Haiku) for initial generation, automatically switches to smart model (Sonnet) for rerolls
+- **Ultrathink mode**: Enhanced generation quality after multiple consecutive rerolls
+- **Token usage transparency**: Displays token count and USD cost for each generation
 - **Rename detection**: Correctly identifies file moves and renames as single operations
 - **Interactive workflow**: Accept, edit, reroll, or add context to generated messages
 - **Format flexibility**: Toggle between single-line and multi-line commit message formats
@@ -70,7 +73,7 @@ The tool will:
 
 ```
 $ git auto-commit
-generating commit description from staged changes touching 3 files...
+staged changes [3 files] (2,145 tokens, $0.0016 USD)
 
 add user authentication with JWT tokens
 
@@ -80,8 +83,7 @@ M src/main.rs
 M Cargo.toml
 
 [Y]ES/[n]o/[r]eroll/[l]ong/[e]dit/[p]rompt ? long
-
-generating commit description from staged changes touching 3 files...
+staged changes [3 files] (2,834 tokens, $0.0021 USD)
 
 add user authentication with JWT tokens
 
@@ -100,6 +102,15 @@ M Cargo.toml
  3 files changed, 156 insertions(+), 2 deletions(-)
  create mode 100644 src/auth.rs
 ```
+
+## CLI Options
+
+```bash
+git auto-commit [OPTIONS]
+```
+
+**Options:**
+- `--debug-prompt` - Display the full prompt sent to Claude (useful for debugging or understanding generation behaviour)
 
 ## Commit message rules
 
@@ -137,9 +148,11 @@ make format          # or cargo fmt
 
 The codebase is organised into several modules:
 
-- **`src/git.rs`** - Git operations using hybrid approach (`git2` crate for diffs, git binary for commits)
+- **`src/git.rs`** - Git operations using hybrid approach (`git2` crate for diffs, git binary for commits), includes data structures for file changes and changesets
 - **`src/ui.rs`** - User interface utilities (prompts, editors, output macros)
-- **`src/claude.rs`** - LLM integration for commit message generation
+- **`src/claude.rs`** - LLM integration for commit message generation with model selection and token tracking
+- **`src/context.rs`** - Application state management bundling all mutable state
+- **`src/cli.rs`** - Command-line argument parsing
 - **`src/main.rs`** - Main application workflow and interactive loop
 
 ## Licence
