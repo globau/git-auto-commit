@@ -192,8 +192,8 @@ YOU MUST:
 Stay descriptive but use compression tactics to fit the limit.
 "#
         )
-        .trim()
-        .to_string();
+            .trim()
+            .to_string();
         input.push_str(&critical_failure_msg);
         input.push('\n');
     }
@@ -217,15 +217,13 @@ Stay descriptive but use compression tactics to fit the limit.
 
     // spawn claude process
     let mut child = Command::new("claude")
-        .args([
-            "--print",
-            "--output-format",
-            "json",
-            "--tools",
-            "",
-            "--model",
-            &ctx.model,
-        ])
+        .args(["--no-session-persistence"])
+        .args(["--print"])
+        .args(["--output-format", "json"])
+        .args(["--system-prompt", ""])
+        .args(["--tools", ""])
+        .args(["--model", &ctx.model])
+        .env("DISABLE_PROMPT_CACHING", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
