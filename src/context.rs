@@ -31,13 +31,16 @@ pub struct AppContext {
     /// whether the user has manually edited the commit description
     pub user_edited: bool,
 
-    /// whether to show the debug prompt (from --debug-prompt flag)
-    pub show_prompt: bool,
+    /// whether to show the claude prompt (from --debug-prompt flag)
+    pub debug_prompt: bool,
+
+    /// whether to show the claude response (from --debug-response flag)
+    pub debug_response: bool,
 }
 
 impl AppContext {
     /// create a new context with default values
-    pub fn new(show_prompt: bool) -> Self {
+    pub fn new(debug_prompt: bool, debug_response: bool) -> Self {
         Self {
             // commit desc
             commit_description: String::from("bug fixes and/or improvements"),
@@ -53,7 +56,8 @@ impl AppContext {
             manual_reroll_count: 0,
             user_edited: false,
             // debugging
-            show_prompt,
+            debug_prompt,
+            debug_response,
         }
     }
 }

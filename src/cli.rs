@@ -12,6 +12,10 @@ pub struct Cli {
     /// print the prompt sent to claude
     #[arg(long)]
     pub debug_prompt: bool,
+
+    /// print the full JSON response from claude
+    #[arg(long)]
+    pub debug_response: bool,
 }
 
 impl Cli {

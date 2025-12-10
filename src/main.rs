@@ -37,7 +37,7 @@ fn run() -> Result<()> {
     git::sanity_check()?;
 
     // create application context
-    let mut ctx = context::AppContext::new(cli.debug_prompt);
+    let mut ctx = context::AppContext::new(cli.debug_prompt, cli.debug_response);
 
     // main - try with default context first, reduce if necessary
     let changeset = loop {
@@ -194,7 +194,7 @@ fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> 
         if file_count == 1 { "file" } else { "files" }
     );
 
-    let spinner = if ctx.show_prompt {
+    let spinner = if ctx.debug_prompt {
         None
     } else {
         let s = ProgressBar::new_spinner();

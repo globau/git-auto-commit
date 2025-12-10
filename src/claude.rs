@@ -6,6 +6,7 @@ use crate::context::AppContext;
 use crate::git::ChangeSet;
 use crate::{info, warning};
 use anyhow::{Result, bail};
+use colored::Colorize;
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -207,9 +208,7 @@ Stay descriptive but use compression tactics to fit the limit.
     }
 
     // print prompt if requested (before adding diff)
-    if ctx.show_prompt {
-        use colored::Colorize;
-        use std::io::Write;
+    if ctx.debug_prompt {
         let _ = writeln!(std::io::stdout(), "\n{}", input.dimmed());
     }
 
@@ -278,6 +277,10 @@ Stay descriptive but use compression tactics to fit the limit.
             }
 
             let res = String::from_utf8_lossy(&stdout_data).trim().to_string();
+
+            if ctx.debug_response {
+                let _ = writeln!(std::io::stdout(), "\n{}", res.dimmed());
+            }
 
             // parse json and extract result field, tokens, and cost
             let json: serde_json::Value = serde_json::from_str(&res)
