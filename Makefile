@@ -15,3 +15,7 @@ test:
 	cargo fmt -- --check
 	cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic
 	cargo test
+
+.PHONY: install
+install:
+	cargo install --path .
