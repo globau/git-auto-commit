@@ -10,10 +10,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Build: `cargo build --release` or `make build`
 - Run: `cargo run` (uses debug build) or `./target/release/git-auto-commit`
-- Run with debug: `./target/release/git-auto-commit --debug-prompt` (shows prompt sent to Claude)
+- Run with debug: `./target/release/git-auto-commit --debug-prompt` (shows prompt sent to Claude) or `--debug-response` (shows full JSON response)
 - Test suite: `make test` (runs formatting check, clippy with pedantic warnings, and tests)
 - Format: `make format` or `cargo fmt`
-- Install: `make install` (copies binary to /usr/local/bin/)
+- Install: `make install` (installs binary to Cargo's bin directory)
 
 ## Code Architecture
 
@@ -47,7 +47,14 @@ The codebase has several modules:
 
 **`src/cli.rs`**: Command-line argument parsing using `clap`
 - Defines CLI structure with `--debug-prompt` flag for showing the prompt sent to Claude
+- Defines CLI structure with `--debug-response` flag for showing the full JSON response from Claude
 - Provides `parse_args()` method to parse command-line arguments
+
+**`src/constants.rs`**: Application constants
+- Commit message constraints: 72-char max line length, 60-70 char safe range
+- UI settings: 10 files max display, 3 max auto-rerolls
+- Diff settings: 3 default context lines, 1 reduced context lines, 50KB warning threshold, 100KB maximum size
+- Claude settings: 30-second timeout, model names ("Haiku" fast, "Sonnet" smart), ultrathink threshold (2 manual rerolls)
 
 **`src/claude.rs`**: LLM integration for commit message generation
 - Uses the `claude` CLI tool (spawns as subprocess) to generate commit descriptions
@@ -59,33 +66,38 @@ The codebase has several modules:
 - Has configurable prompt with strict rules: 72-char limit, lowercase start, no Claude attribution
 - 30-second timeout for LLM generation
 - Allows extra user-provided prompt context
-- Functions take `&AppContext` to access all generation settings (model, multi_line, think_hard, prompt_extra, show_prompt, manual_reroll_count)
+- Functions take `&AppContext` to access all generation settings (model, multi_line, think_hard, prompt_extra, debug_prompt, debug_response, manual_reroll_count)
 
 **`src/context.rs`**: Application state management
 - `AppContext` struct holds all mutable state throughout the application
 - Created in `run()` and passed through the call chain as `&mut AppContext`
-- Bundles related state: git diff settings (context_lines), generation settings (model, multi_line, think_hard, prompt_extra), workflow flags (user_edited, regenerate, auto_reroll_count, manual_reroll_count), and the commit description itself
+- Bundles related state: git diff settings (context_lines), generation settings (model, multi_line, think_hard, prompt_extra), workflow flags (user_edited, regenerate, auto_reroll_count, manual_reroll_count), debugging flags (debug_prompt, debug_response), and the commit description itself
 - Eliminates long parameter lists by passing a single context struct
 - Uses `#[allow(clippy::struct_excessive_bools)]` as the bools represent independent flags rather than a state machine
 
 **`src/main.rs`**: Main application workflow
 1. Checks for staged changes first
 2. Falls back to unstaged changes (including untracked files) if nothing staged
-3. Generates commit description via Claude LLM using fast model (Haiku)
-4. Displays generation summary with token usage and cost in USD
-5. Interactive loop with options:
+3. Automatic diff size management:
+   - Starts with 3 context lines for git diff
+   - If diff exceeds 50KB, reduces to 1 context line and retries
+   - If diff still exceeds 100KB, exits with error
+   - If diff is 50-100KB, prompts user to continue or abort
+4. Generates commit description via Claude LLM using fast model (Haiku)
+5. Displays generation summary with token usage and cost in USD
+6. Interactive loop with options:
    - YES: accept and commit
    - no: abort
    - reroll: regenerate description (switches to smart model/Sonnet with "think hard" mode)
    - long/short: toggle between multi-line and single-line formats
    - edit: manually edit description (single-line or multi-line based on current format)
    - prompt: add extra context to Claude prompt
-6. Model selection: starts with Haiku, switches to Sonnet after first reroll (auto or manual)
-7. Ultrathink mode: activates after 2+ consecutive manual rerolls for enhanced quality
-8. Auto-rerolls (max 3 attempts) if any line exceeds 72 characters
-9. Warns if commit message contains "Claude" or has unexpected newlines
-10. Displays up to 10 files in output (with count of remaining files if more)
-11. Stages unstaged changes before committing (if applicable)
+7. Model selection: starts with Haiku, switches to Sonnet after first reroll (auto or manual)
+8. Ultrathink mode: activates after 2+ consecutive manual rerolls for enhanced quality
+9. Auto-rerolls (max 3 attempts) if any line exceeds 72 characters
+10. Warns if commit message contains "Claude" or has unexpected newlines
+11. Displays up to 10 files in output (with count of remaining files if more)
+12. Stages unstaged changes before committing (if applicable)
 
 ## Test Suite
 

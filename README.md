@@ -15,12 +15,13 @@ A Rust CLI tool that analyses git changes and generates commit messages using Cl
 - **Smart change detection**: Prioritises staged changes, falls back to unstaged changes (including untracked files) if nothing is staged
 - **AI-powered commit messages**: Uses the `claude` CLI tool to generate contextual commit descriptions
 - **Adaptive model selection**: Starts with fast model (Haiku) for initial generation, automatically switches to smart model (Sonnet) for rerolls
-- **Ultrathink mode**: Enhanced generation quality after multiple consecutive rerolls
+- **Ultrathink mode**: Enhanced generation quality after 3+ consecutive manual rerolls
 - **Token usage transparency**: Displays token count and USD cost for each generation
 - **Rename detection**: Correctly identifies file moves and renames as single operations
 - **Interactive workflow**: Accept, edit, reroll, or add context to generated messages
 - **Format flexibility**: Toggle between single-line and multi-line commit message formats
-- **Diff filtering**: Automatically skips diffs for binaries, lock files (*.lock, *-lock.json/yaml), and minified files (*.min.js/css)
+- **Large diff handling**: Warns at 50KB, reduces context, and limits maximum diff size to 100KB
+- **Diff filtering**: Automatically skips diffs for binaries, lock files (*.lock, *-lock.json/yaml), and minified files (*.min.js/css, *-min.js/css)
 
 ## Requirements
 
@@ -38,7 +39,7 @@ cd git-auto-commit
 make install
 ```
 
-This builds the release binary and copies it to `/usr/local/bin/`.
+This builds the release binary and installs it into Cargo's `bin` directory.
 
 Alternatively, build manually:
 
@@ -111,14 +112,15 @@ git auto-commit [OPTIONS]
 
 **Options:**
 - `--debug-prompt` - Display the full prompt sent to Claude (useful for debugging or understanding generation behaviour)
+- `--debug-response` - Display the full JSON response from Claude (useful for debugging)
 
 ## Commit message rules
 
 Generated commit messages follow these rules:
 - Maximum 72 characters per line
 - Start with lowercase letter
-- No period at the end
 - No Claude attribution or metadata
+- Focus on outcome, not implementation details
 
 ## Development
 
@@ -153,6 +155,7 @@ The codebase is organised into several modules:
 - **`src/claude.rs`** - LLM integration for commit message generation with model selection and token tracking
 - **`src/context.rs`** - Application state management bundling all mutable state
 - **`src/cli.rs`** - Command-line argument parsing
+- **`src/constants.rs`** - Configuration constants (line length limits, timeouts, model names, thresholds)
 - **`src/main.rs`** - Main application workflow and interactive loop
 
 ## Licence
