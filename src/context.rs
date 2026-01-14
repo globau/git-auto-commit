@@ -31,6 +31,9 @@ pub struct AppContext {
     /// whether the user has manually edited the commit description
     pub user_edited: bool,
 
+    /// how to interact with claude
+    pub claude_method: ClaudeMethod,
+
     /// whether to show the claude prompt (from --debug-prompt flag)
     pub debug_prompt: bool,
 
@@ -40,7 +43,7 @@ pub struct AppContext {
 
 impl AppContext {
     /// create a new context with default values
-    pub fn new(debug_prompt: bool, debug_response: bool) -> Self {
+    pub fn new(claude_method: ClaudeMethod, debug_prompt: bool, debug_response: bool) -> Self {
         Self {
             // commit desc
             commit_description: String::from("bug fixes and/or improvements"),
@@ -55,9 +58,17 @@ impl AppContext {
             auto_reroll_count: 0,
             manual_reroll_count: 0,
             user_edited: false,
+            // claude
+            claude_method,
             // debugging
             debug_prompt,
             debug_response,
         }
     }
+}
+
+pub enum ClaudeMethod {
+    Auto,
+    Cli,
+    Api,
 }

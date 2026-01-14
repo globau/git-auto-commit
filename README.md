@@ -50,6 +50,16 @@ cp target/release/git-auto-commit /usr/local/bin/
 
 **Note**: The binary must be named `git-auto-commit` and placed in a directory on your PATH (such as `/usr/local/bin/`) for the `git auto-commit` subcommand syntax to work.
 
+### API-Key
+
+By default git-auto-commit will use the `claude` CLI tool. This will consume a lot more tokens than using the API directly.
+
+To configure API usage you first must generate and API-Key via the claude.ai website, then place it into `~/.config/git-auto-commit/config` with the following format:
+
+```
+api-key=...
+```
+
 ## Usage
 
 Navigate to any git repository and run:

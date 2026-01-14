@@ -16,12 +16,19 @@ impl Git2ErrorExt for git2::Error {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum FileType {
+    Normal,
+    Binary,
+    Generated,
+}
+
 #[derive(Debug)]
 pub struct FileChange {
     pub status: Delta,
     pub path: String,
     pub old_path: Option<String>, // set for renames (Delta::Renamed)
-    pub diff_ignored: bool,       // lock files, minified files, etc.
+    pub file_type: FileType,
 }
 
 /// convert Delta to single-character status code for display
@@ -141,15 +148,29 @@ fn files_from_git_diff(diff: &git2::Diff) -> Vec<FileChange> {
         if let Some(path) = path {
             let path_str = path.to_string_lossy().into_owned();
 
-            // check if diff should be ignored (lock files, minified files, binary files)
             let is_binary = delta.new_file().is_binary() || delta.old_file().is_binary();
-            let diff_ignored = should_ignore_diff(&path_str) || is_binary;
+
+            let path_lower = path_str.to_lowercase();
+            #[allow(clippy::case_sensitive_file_extension_comparisons)]
+            let is_generated = path_lower.ends_with(".min.js")
+                || path_lower.ends_with(".min.css")
+                || path_lower.ends_with("-min.js")
+                || path_lower.ends_with("-min.css")
+                || path_lower.ends_with(".lock")
+                || path_lower.ends_with("-lock.json")
+                || path_lower.ends_with("-lock.yaml");
 
             files.push(FileChange {
                 status,
                 path: path_str,
                 old_path,
-                diff_ignored,
+                file_type: if is_binary {
+                    FileType::Binary
+                } else if is_generated {
+                    FileType::Generated
+                } else {
+                    FileType::Normal
+                },
             });
         }
     }
@@ -209,36 +230,6 @@ fn create_unstaged_diff(repo: &Repository, context_lines: u32) -> Result<git2::D
     Ok(diff)
 }
 
-/// check if file diff should be ignored (lock files, minified files, etc.)
-fn should_ignore_diff(path: &str) -> bool {
-    // check specific lock file patterns
-    let path_lower = path.to_lowercase();
-
-    // lock files - check full filename patterns
-    if path_lower.ends_with("-lock.json") || path_lower.ends_with("-lock.yaml") {
-        return true;
-    }
-
-    // check file extension for .lock files
-    if let Some(ext) = Path::new(path).extension() {
-        let ext_lower = ext.to_string_lossy().to_lowercase();
-        if ext_lower == "lock" {
-            return true;
-        }
-    }
-
-    // minified files - check patterns before extension
-    if path_lower.ends_with(".min.js")
-        || path_lower.ends_with(".min.css")
-        || path_lower.ends_with("-min.js")
-        || path_lower.ends_with("-min.css")
-    {
-        return true;
-    }
-
-    false
-}
-
 /// format a diff object into unified diff string, skipping ignored files
 fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
     let mut output = String::new();
@@ -259,7 +250,7 @@ fn format_diff(diff: &git2::Diff, files: &[FileChange]) -> Result<String> {
             skip_current_file = files
                 .iter()
                 .find(|f| f.path == path_str)
-                .is_some_and(|f| f.diff_ignored);
+                .is_some_and(|f| f.file_type != FileType::Normal);
 
             if skip_current_file {
                 // add a note that this file's diff was ignored

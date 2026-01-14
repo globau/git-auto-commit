@@ -231,8 +231,8 @@ fn test_binary_file_is_ignored() {
     println!("Binary file test - {} file(s):", changeset.files.len());
     for file in &changeset.files {
         println!(
-            "  status: {:?}, path: {}, diff_ignored: {}",
-            file.status, file.path, file.diff_ignored
+            "  status: {:?}, path: {}, file_type: {:?}",
+            file.status, file.path, file.file_type
         );
     }
 
@@ -244,8 +244,8 @@ fn test_binary_file_is_ignored() {
         .expect("binary file should be in changes");
 
     assert!(
-        binary_file.diff_ignored,
-        "binary file should have diff_ignored = true"
+        binary_file.file_type == FileType::Binary,
+        "binary file should have file_type = Binary"
     );
 
     // find text file
@@ -256,8 +256,8 @@ fn test_binary_file_is_ignored() {
         .expect("text file should be in changes");
 
     assert!(
-        !text_file.diff_ignored,
-        "text file should not have diff_ignored = true"
+        text_file.file_type == FileType::Normal,
+        "text file should have file_type = Normal"
     );
 }
 
@@ -291,8 +291,8 @@ fn test_lock_file_is_ignored() {
         .expect("lock file should be in changes");
 
     assert!(
-        lock_file.diff_ignored,
-        "lock file should have diff_ignored = true"
+        lock_file.file_type == FileType::Generated,
+        "lock file should have file_type = Generated"
     );
 
     // find normal file
@@ -303,8 +303,8 @@ fn test_lock_file_is_ignored() {
         .expect("normal file should be in changes");
 
     assert!(
-        !normal_file.diff_ignored,
-        "normal file should not have diff_ignored = true"
+        normal_file.file_type == FileType::Normal,
+        "normal file should have file_type = Normal"
     );
 }
 

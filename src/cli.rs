@@ -8,7 +8,17 @@ use clap::Parser;
     long_about = None,
     disable_version_flag = true
 )]
+#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::struct_field_names)]
 pub struct Cli {
+    /// force CLI usage
+    #[arg(long, conflicts_with = "api")]
+    pub cli: bool,
+
+    /// force API usage
+    #[arg(long, conflicts_with = "cli")]
+    pub api: bool,
+
     /// print the prompt sent to claude
     #[arg(long)]
     pub debug_prompt: bool,

@@ -9,7 +9,8 @@ use crate::constants::{
     DEFAULT_CONTEXT, DIFF_SIZE_MAXIMUM_BYTES, DIFF_SIZE_WARNING_BYTES, LESS_CONTEXT,
     MAX_AUTO_REROLLS, MAX_FILES_TO_SHOW, MAX_LINE_LENGTH, MODEL_FAST, MODEL_SMART,
 };
-use crate::git::{ChangeSet, FileChange, status_char};
+use crate::context::ClaudeMethod;
+use crate::git::{ChangeSet, FileChange, FileType, status_char};
 use anyhow::{Result, bail};
 use indicatif::{ProgressBar, ProgressStyle};
 use num_format::{Locale, ToFormattedString};
@@ -25,7 +26,7 @@ fn main() {
 
 fn run() -> Result<()> {
     // parse cli arguments
-    let cli = cli::Cli::parse_args();
+    let args = cli::Cli::parse_args();
 
     // sanity checks
     if !std::io::stdin().is_terminal()
@@ -37,7 +38,17 @@ fn run() -> Result<()> {
     git::sanity_check()?;
 
     // create application context
-    let mut ctx = context::AppContext::new(cli.debug_prompt, cli.debug_response);
+    let mut ctx = context::AppContext::new(
+        if args.cli {
+            ClaudeMethod::Cli
+        } else if args.api {
+            ClaudeMethod::Api
+        } else {
+            ClaudeMethod::Auto
+        },
+        args.debug_prompt,
+        args.debug_response,
+    );
 
     // main - try with default context first, reduce if necessary
     let changeset = loop {
@@ -222,12 +233,24 @@ fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> 
         }
     };
 
-    status!(
-        "{} ({} tokens, ${:.4} USD)",
-        summary,
-        generated.tokens.to_formatted_string(&Locale::en),
-        generated.cost
-    );
+    if let Some(cost) = generated.cost {
+        status!(
+            "{} ({} {}/{} tokens, ${:.4} USD)",
+            summary,
+            generated.method,
+            generated.input_tokens.to_formatted_string(&Locale::en),
+            generated.output_tokens.to_formatted_string(&Locale::en),
+            cost
+        );
+    } else {
+        status!(
+            "{} ({} {}/{} tokens)",
+            summary,
+            generated.method,
+            generated.input_tokens.to_formatted_string(&Locale::en),
+            generated.output_tokens.to_formatted_string(&Locale::en),
+        );
+    }
 
     Some(generated.message)
 }
@@ -287,11 +310,22 @@ fn display_commit_info(commit_description: &str, files: &[FileChange]) {
     let files_to_show = files.iter().take(MAX_FILES_TO_SHOW);
 
     for file in files_to_show {
+        let suffix = match file.file_type {
+            FileType::Normal => "",
+            FileType::Binary => " (binary)",
+            FileType::Generated => " (generated)",
+        };
         if let Some(old_path) = &file.old_path {
             // show renames as "old_path → new_path"
-            info!("{} {} → {}", status_char(file.status), old_path, file.path);
+            info!(
+                "{} {} → {}{}",
+                status_char(file.status),
+                old_path,
+                file.path,
+                suffix
+            );
         } else {
-            info!("{} {}", status_char(file.status), file.path);
+            info!("{} {}{}", status_char(file.status), file.path, suffix);
         }
     }
 

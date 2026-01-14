@@ -57,14 +57,18 @@ The codebase has several modules:
 - Claude settings: 30-second timeout, model names ("Haiku" fast, "Sonnet" smart), ultrathink threshold (2 manual rerolls)
 
 **`src/claude.rs`**: LLM integration for commit message generation
-- Uses the `claude` CLI tool (spawns as subprocess) to generate commit descriptions
+- Supports two backends for Claude API access:
+  - Direct API: uses `ureq` HTTP client to call Claude API directly (used when API key is configured)
+  - CLI wrapper: spawns `claude` CLI tool as subprocess (used as fallback when no API key)
+- API key configuration: reads from `~/.config/git-auto-commit/config` with format `api-key=<key>`
 - Supports model selection: starts with fast model (Haiku), switches to smart model (Sonnet) after first reroll
+- Model mapping: "Haiku" → claude-3-5-haiku-20241022, "Sonnet" → claude-3-7-sonnet-20250219
 - Includes "think hard" mode for improved generation quality (enabled on rerolls)
 - Includes "ultrathink" mode activated after 2+ consecutive manual rerolls for maximum quality
-- Returns token usage and cost information from Claude API (parsed from JSON response)
+- Returns token usage and cost information (if available)
 - Supports single-line and multi-line commit message formats
 - Has configurable prompt with strict rules: 72-char limit, lowercase start, no Claude attribution
-- 30-second timeout for LLM generation
+- 30-second timeout for LLM generation (configured via `ureq::Agent` for API, `wait_timeout` for CLI)
 - Allows extra user-provided prompt context
 - Functions take `&AppContext` to access all generation settings (model, multi_line, think_hard, prompt_extra, debug_prompt, debug_response, manual_reroll_count)
 
