@@ -235,20 +235,22 @@ fn generate(ctx: &context::AppContext, changeset: &ChangeSet) -> Option<String> 
 
     if let Some(cost) = generated.cost {
         status!(
-            "{} ({} {}/{} tokens, ${:.4} USD)",
+            "{} ({} {}/{} tokens, {}, ${:.4} USD)",
             summary,
             generated.method,
             generated.input_tokens.to_formatted_string(&Locale::en),
             generated.output_tokens.to_formatted_string(&Locale::en),
+            ctx.model.to_lowercase(),
             cost
         );
     } else {
         status!(
-            "{} ({} {}/{} tokens)",
+            "{} ({} {}/{} tokens, {})",
             summary,
             generated.method,
             generated.input_tokens.to_formatted_string(&Locale::en),
             generated.output_tokens.to_formatted_string(&Locale::en),
+            ctx.model.to_lowercase(),
         );
     }
 
