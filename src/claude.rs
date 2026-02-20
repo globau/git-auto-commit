@@ -401,8 +401,8 @@ fn api_key() -> Option<String> {
 fn claude_api(ctx: &AppContext, api_key: &str, prompt: &str) -> Result<ClaudeResponse> {
     // map model names to api model ids
     let model_id = match ctx.model.as_str() {
-        "Haiku" => "claude-3-5-haiku-20241022",
-        "Sonnet" => "claude-3-7-sonnet-20250219",
+        "Haiku" => "claude-haiku-4-5",
+        "Sonnet" => "claude-sonnet-4-6",
         _ => bail!("unknown model: {}", ctx.model),
     };
 
